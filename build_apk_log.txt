@@ -1,0 +1,36 @@
+﻿Running Gradle task 'assembleRelease'...                        
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 19860 bytes (98.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+flutter : ../../../flut
+ter/third_party/dart/ru
+ntime/vm/virtual_memory
+_win.cc: 161: error: 
+Failed to commit: 1455
+At line:1 char:1
++ flutter build apk 
+2>&1 | Out-File 
+-FilePath 
+build_apk_log.txt 
+-Encodi ...
++ 
+~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (../../../flut   
+ te...to commit: 14    
+55:String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+
+../../../flutter/third_
+party/dart/runtime/vm/z
+one.cc: 96: error: Out 
+of memory.
+Dart snapshot 
+generator failed with 
+exit code -1073740791
+Dart snapshot 
+generator failed with 
+exit code -1073740791

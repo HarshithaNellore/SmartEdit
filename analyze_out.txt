@@ -1,0 +1,45 @@
+﻿Analyzing SmartCut-main...                                      
+
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\auth\login_screen.dart:7:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\screens\collaboration\collaboration_screen.dart:123:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\collaboration\collaboration_screen.dart:226:39 - unnecessary_underscores
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart' - lib\screens\editor\photo_editor_screen.dart:1:8 - unnecessary_import
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\photo_editor_screen.dart:448:78 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\photo_editor_screen.dart:448:98 - use_build_context_synchronously
+warning - Unused import: 'dart:io' - lib\screens\editor\video_editor_screen.dart:1:8 - unused_import
+   info - The import of 'dart:typed_data' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/foundation.dart' - lib\screens\editor\video_editor_screen.dart:2:8 - unnecessary_import
+warning - Unused import: 'package:animate_do/animate_do.dart' - lib\screens\editor\video_editor_screen.dart:7:8 - unused_import
+warning - Unused import: 'package:flutter_colorpicker/flutter_colorpicker.dart' - lib\screens\editor\video_editor_screen.dart:9:8 - unused_import
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\video_editor_screen.dart:824:78 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\video_editor_screen.dart:824:98 - use_build_context_synchronously
+warning - A value for optional parameter 'x' isn't ever given - lib\screens\editor\video_editor_screen.dart:877:60 - unused_element_parameter
+warning - A value for optional parameter 'y' isn't ever given - lib\screens\editor\video_editor_screen.dart:877:73 - unused_element_parameter
+  error - Undefined name 'SharePlus' - lib\screens\export\export_screen.dart:83:31 - undefined_identifier
+  error - The method 'ShareParams' isn't defined for the type '_ExportScreenState' - lib\screens\export\export_screen.dart:83:56 - undefined_method
+   info - Unnecessary use of multiple underscores - lib\screens\export\export_screen.dart:255:37 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:318:43 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:478:47 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:824:39 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:838:39 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:852:39 - use_build_context_synchronously
+warning - The value of the field '_cacheCleared' isn't used - lib\screens\settings\settings_screen.dart:23:8 - unused_field
+
+flutter : 23 issues 
+found. (ran in 13.7s)
+At line:1 char:1
++ flutter analyze 
+--no-pub 2>&1 | 
+Out-File -FilePath 
+C:\Users\soumya\Do ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (23 issues fou   
+ nd. (ran in 13.7s)    
+:String) [], Remot    
+eException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 

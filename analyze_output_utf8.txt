@@ -1,0 +1,5 @@
+﻿Analyzing photo_editor_screen.dart...                           
+
+  error - The method 'Crop' isn't defined for the type '_PhotoEditorScreenState' - lib\screens\editor\photo_editor_screen.dart:222:18 - undefined_method
+   info - 'scale' is deprecated and shouldn't be used. Use scaleByVector3, scaleByVector4, or scaleByDouble instead - lib\screens\editor\photo_editor_screen.dart:244:19 - deprecated_member_use
+

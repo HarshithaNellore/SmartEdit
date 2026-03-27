@@ -1,0 +1,74 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+class ApiService {
+  // Use localhost for Web, Windows, and iOS. Use 10.0.2.2 for Android Emulator.
+  static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:5000';
+    // For mobile devices, we use the local network or the emulator's loopback
+    // Defaulting to localhost for Windows/Desktop and 10.0.2.2 as a fallback for Android
+    return defaultTargetPlatform == TargetPlatform.android 
+        ? 'http://10.0.2.2:5000' 
+        : 'http://localhost:5000';
+  }
+
+  static Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('auth_token');
+  }
+
+  static Future<void> setToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_token', token);
+  }
+
+  static Future<void> removeToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+  }
+
+  static Future<Map<String, String>> _headers({bool auth = false}) async {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (auth) {
+      final token = await getToken();
+      if (token != null) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    }
+    return headers;
+  }
+
+  static Future<http.Response> get(String path, {bool auth = true}) async {
+    final headers = await _headers(auth: auth);
+    return http.get(Uri.parse('$baseUrl$path'), headers: headers);
+  }
+
+  static Future<http.Response> post(String path,
+      {Map<String, dynamic>? body, bool auth = true}) async {
+    final headers = await _headers(auth: auth);
+    return http.post(
+      Uri.parse('$baseUrl$path'),
+      headers: headers,
+      body: body != null ? jsonEncode(body) : null,
+    );
+  }
+
+  static Future<http.Response> put(String path,
+      {Map<String, dynamic>? body, bool auth = true}) async {
+    final headers = await _headers(auth: auth);
+    return http.put(
+      Uri.parse('$baseUrl$path'),
+      headers: headers,
+      body: body != null ? jsonEncode(body) : null,
+    );
+  }
+
+  static Future<http.Response> delete(String path, {bool auth = true}) async {
+    final headers = await _headers(auth: auth);
+    return http.delete(Uri.parse('$baseUrl$path'), headers: headers);
+  }
+}

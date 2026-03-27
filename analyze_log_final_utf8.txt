@@ -1,0 +1,60 @@
+﻿Analyzing smartedit-main...                                     
+
+   info - 'dart:html' is deprecated and shouldn't be used. Use package:web and dart:js_interop instead - lib\screens\ai_features\ai_agent_screen.dart:10:1 - deprecated_member_use
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\ai_features\ai_agent_screen.dart:12:8 - unused_import
+warning - The value of the field '_currentStep' isn't used - lib\screens\ai_features\ai_agent_screen.dart:35:7 - unused_field
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_agent_screen.dart:576:45 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_agent_screen.dart:576:49 - unnecessary_underscores
+   info - 'dart:html' is deprecated and shouldn't be used. Use package:web and dart:js_interop instead - lib\screens\ai_features\ai_result_dialog.dart:7:1 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:129:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:129:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:136:35 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:136:39 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:149:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\ai_features\ai_result_dialog.dart:149:37 - unnecessary_underscores
+warning - The value of the local variable 'anchor' isn't used - lib\screens\ai_features\ai_result_dialog.dart:425:13 - unused_local_variable
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\auth\login_screen.dart:8:8 - unused_import
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\collaboration\collaboration_screen.dart:6:8 - unused_import
+   info - Unnecessary use of multiple underscores - lib\screens\collaboration\collaboration_screen.dart:207:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\collaboration\collaboration_screen.dart:437:43 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\collaboration\collaboration_screen.dart:582:43 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps - lib\screens\collaboration\collaboration_screen.dart:741:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\collaboration\collaboration_screen.dart:849:29 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\collage_editor_screen.dart:78:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\editor\collage_editor_screen.dart:89:28 - use_build_context_synchronously
+   info - Unnecessary use of string interpolation - lib\screens\editor\collage_editor_screen.dart:321:16 - unnecessary_string_interpolations
+warning - The value of the field '_picker' isn't used - lib\screens\editor\video_editor_screen.dart:21:21 - unused_field
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\editor\video_editor_screen.dart:747:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\editor\video_editor_screen.dart:749:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\editor\video_editor_screen.dart:753:42 - deprecated_member_use
+  error - Expected to find ';' - lib\screens\editor\video_editor_screen.dart:891:7 - expected_token
+warning - Dead code - lib\screens\editor\video_editor_screen.dart:891:8 - dead_code
+  error - Expected an identifier - lib\screens\editor\video_editor_screen.dart:891:8 - missing_identifier
+  error - Expected to find ';' - lib\screens\editor\video_editor_screen.dart:891:8 - expected_token
+  error - Unexpected text ';' - lib\screens\editor\video_editor_screen.dart:891:8 - unexpected_token
+  error - Expected an identifier - lib\screens\editor\video_editor_screen.dart:892:5 - missing_identifier
+  error - Unexpected text ';' - lib\screens\editor\video_editor_screen.dart:892:5 - unexpected_token
+   info - Unnecessary empty statement - lib\screens\editor\video_editor_screen.dart:892:6 - empty_statements
+warning - The declaration '_iconButton' isn't referenced - lib\screens\editor\video_editor_screen.dart:1480:10 - unused_element
+warning - The declaration '_miniButton' isn't referenced - lib\screens\editor\video_editor_screen.dart:1552:10 - unused_element
+warning - Unused import: 'dart:async' - lib\screens\export\export_screen.dart:1:8 - unused_import
+warning - Unused import: 'dart:io' - lib\screens\export\export_screen.dart:2:8 - unused_import
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\export\export_screen.dart:14:8 - unused_import
+warning - The operand can't be 'null', so the condition is always 'true' - lib\screens\export\export_screen.dart:182:43 - unnecessary_null_comparison
+   info - Unnecessary use of multiple underscores - lib\screens\export\export_screen.dart:450:37 - unnecessary_underscores
+warning - The declaration '_importMedia' isn't referenced - lib\screens\home\home_screen.dart:163:16 - unused_element
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:310:43 - unnecessary_underscores
+warning - The declaration '_buildTemplatesSection' isn't referenced - lib\screens\home\home_screen.dart:384:10 - unused_element
+   info - Unnecessary use of multiple underscores - lib\screens\home\home_screen.dart:416:47 - unnecessary_underscores
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:761:31 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\home\home_screen.dart:764:23 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:766:39 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:783:39 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\home\home_screen.dart:797:39 - use_build_context_synchronously
+warning - Unused import: '../../widgets/glass_card.dart' - lib\screens\settings\settings_screen.dart:6:8 - unused_import
+warning - The value of the field '_cacheCleared' isn't used - lib\screens\settings\settings_screen.dart:23:8 - unused_field
+   info - The constant name 'DEMO_MODE' isn't a lowerCamelCase identifier - lib\services\auth_service.dart:8:16 - constant_identifier_names
+   info - The constant name 'DEMO_EMAIL' isn't a lowerCamelCase identifier - lib\services\auth_service.dart:11:16 - constant_identifier_names
+   info - The constant name 'DEMO_PASSWORD' isn't a lowerCamelCase identifier - lib\services\auth_service.dart:12:16 - constant_identifier_names
+   info - The constant name 'DEMO_TOKEN' isn't a lowerCamelCase identifier - lib\services\auth_service.dart:13:16 - constant_identifier_names
+
