@@ -33,6 +33,8 @@ dependencies:
   ffmpeg_kit_flutter_min_gpl: ^6.0.3
   file_picker: ^10.3.10
   crop_image: ^1.0.17
+  firebase_core: ^4.6.0
+  cloud_firestore: ^6.2.0
 
 dev_dependencies:
   flutter_test:

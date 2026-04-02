@@ -37,6 +37,30 @@ class Project {
         layers = layers ?? [],
         collaborators = collaborators ?? [],
         comments = comments ?? [];
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'type': type.toString().split('.').last,
+      'createdAt': createdAt.toIso8601String(),
+      'modifiedAt': modifiedAt.toIso8601String(),
+      'totalDuration': totalDuration.inMilliseconds,
+      'isShared': isShared,
+    };
+  }
+
+  factory Project.fromJson(Map<String, dynamic> json) {
+    return Project(
+      id: json['id'],
+      name: json['name'] ?? 'Untitled',
+      type: ProjectType.values.firstWhere((e) => e.toString() == 'ProjectType.${json['type']}', orElse: () => ProjectType.video),
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      modifiedAt: json['modifiedAt'] != null ? DateTime.parse(json['modifiedAt']) : null,
+      totalDuration: Duration(milliseconds: json['totalDuration'] ?? 0),
+      isShared: json['isShared'] ?? false,
+    );
+  }
 }
 
 class MediaItem {

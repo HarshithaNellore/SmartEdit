@@ -111,7 +111,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   }
 
   // ── Text overlays for selected clip ──
-  final List<TextOverlay> _textOverlays = [];
+  final List<VideoTextOverlay> _textOverlays = [];
 
   // ── Background audio ──
   String? _backgroundAudioPath;
@@ -125,6 +125,47 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   // ── Trim state ──
   double _trimStart = 0.0;
   double _trimEnd = 1.0;
+
+  // ── Undo/Redo State ──
+  final List<List<VideoClip>> _undoStack = [];
+  final List<List<VideoClip>> _redoStack = [];
+  
+  void _saveStateToHistory() {
+    _undoStack.add(_videoClips.map((c) => VideoClip.copy(c)).toList());
+    _redoStack.clear();
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    setState(() {
+      _redoStack.add(_videoClips.map((c) => VideoClip.copy(c)).toList());
+      final previousState = _undoStack.removeLast();
+      _videoClips.clear();
+      _videoClips.addAll(previousState);
+      if (_selectedClipIndex != null && _selectedClipIndex! >= _videoClips.length) {
+        _selectedClipIndex = _videoClips.isNotEmpty ? _videoClips.length - 1 : null;
+      }
+    });
+    if (_selectedClipIndex != null) {
+      _loadVideoForClip(_selectedClipIndex!);
+    }
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    setState(() {
+      _undoStack.add(_videoClips.map((c) => VideoClip.copy(c)).toList());
+      final nextState = _redoStack.removeLast();
+      _videoClips.clear();
+      _videoClips.addAll(nextState);
+      if (_selectedClipIndex != null && _selectedClipIndex! >= _videoClips.length) {
+        _selectedClipIndex = _videoClips.isNotEmpty ? _videoClips.length - 1 : null;
+      }
+    });
+    if (_selectedClipIndex != null) {
+      _loadVideoForClip(_selectedClipIndex!);
+    }
+  }
 
   // ── Animations ──
   late AnimationController _fadeController;
@@ -277,6 +318,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       setState(() {
         _selectedClipIndex = _videoClips.length - 1;
       });
+      _saveStateToHistory();
 
       await _loadVideoForClip(_videoClips.length - 1);
     } catch (e) {
@@ -388,6 +430,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         _audioController?.dispose();
         _audioController = VideoPlayerController.file(File(_backgroundAudioPath!));
         await _audioController!.initialize();
+        await _audioController!.setVolume(1.0);
+        await _audioController!.setLooping(true);
         setState(() {
           _audioDuration = _audioController!.value.duration;
           _audioTrimStart = 0.0;
@@ -450,6 +494,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   // ═══════════════════════════════════════════════════════
 
   void _removeClip(int index) {
+    _saveStateToHistory();
     setState(() {
       _videoClips.removeAt(index);
       if (_videoClips.isEmpty) {
@@ -468,9 +513,35 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   }
 
   void _duplicateClip(int index) {
+    if (index < 0 || index >= _videoClips.length) return;
+    _saveStateToHistory();
     setState(() {
       _videoClips.insert(index + 1, VideoClip.copy(_videoClips[index]));
     });
+    _showFeedback('Clip duplicated');
+  }
+
+  Future<void> _replaceClip(int index) async {
+    if (index < 0 || index >= _videoClips.length) return;
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.video);
+      if (result == null || result.files.isEmpty || !mounted) return;
+
+      final file = result.files.first;
+      if (file.path == null) return;
+
+      _saveStateToHistory();
+      setState(() {
+        _videoClips[index] = VideoClip(
+          fileName: file.name,
+          filePath: file.path!,
+        );
+      });
+      _loadVideoForClip(index);
+      _showFeedback('Clip replaced');
+    } catch (e) {
+      _showError('Failed to replace video: $e');
+    }
   }
 
   void _splitClipAtPosition() {
@@ -493,6 +564,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     final clip1 = VideoClip.copy(clip)..trimEndFraction = splitFrac;
     final clip2 = VideoClip.copy(clip)..trimStartFraction = splitFrac;
 
+    _saveStateToHistory();
     setState(() {
       _videoClips[_selectedClipIndex!] = clip1;
       _videoClips.insert(_selectedClipIndex! + 1, clip2);
@@ -501,6 +573,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   }
 
   void _reorderClip(int oldIndex, int newIndex) {
+    _saveStateToHistory();
     setState(() {
       if (newIndex > oldIndex) newIndex -= 1;
       final clip = _videoClips.removeAt(oldIndex);
@@ -549,7 +622,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
                 setState(() {
-                  _textOverlays.add(TextOverlay(
+                  _textOverlays.add(VideoTextOverlay(
                     text: controller.text.trim(),
                     offset: const Offset(100, 100), // Raw pixels instead of fraction
                     fontSize: 24,
@@ -613,6 +686,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                 style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted)),
           ]),
         ),
+        if (_undoStack.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.undo, color: Colors.white, size: 20),
+            onPressed: _undo,
+            tooltip: 'Undo',
+          ),
+        if (_redoStack.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.redo, color: Colors.white, size: 20),
+            onPressed: _redo,
+            tooltip: 'Redo',
+          ),
         if (_videoClips.isNotEmpty)
           GestureDetector(
             onTap: () => Navigator.pushNamed(
@@ -623,6 +708,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                 'audioPath': _backgroundAudioPath,
                 'audioTrimStartMs': (_audioTrimStart * _audioDuration.inMilliseconds).round(),
                 'audioTrimEndMs': (_audioTrimEnd * _audioDuration.inMilliseconds).round(),
+                'textOverlays': _textOverlays,
               },
             ),
             child: Container(
@@ -1360,105 +1446,81 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       onLongPress: () => _showClipOptions(index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 100,
-        margin: const EdgeInsets.only(right: 6),
+        width: 110,
+        margin: const EdgeInsets.only(right: 4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    AppTheme.primaryPurple.withAlpha(40),
-                    AppTheme.primaryPurple.withAlpha(20),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : null,
-          color: isSelected ? null : AppTheme.darkElevated,
+          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? AppTheme.primaryPurple.withAlpha(40) : AppTheme.darkElevated,
           border: Border.all(
-            color: isSelected ? AppTheme.primaryPurple : Colors.white.withAlpha(15),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
+            width: isSelected ? 2 : 0,
           ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           child: Stack(fit: StackFit.expand, children: [
+            // Filmstrip background grid simulation
+            Row(
+              children: List.generate(4, (i) => Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              )),
+            ),
+
             // Clip content
             Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.videocam,
-                  color: isSelected ? AppTheme.primaryPurple : AppTheme.textMuted,
-                  size: 22),
-              const SizedBox(height: 2),
-              Text('Clip ${index + 1}',
+              Icon(Icons.videocam_rounded,
+                  color: isSelected ? AppTheme.primaryPink : AppTheme.textMuted,
+                  size: 24),
+              const SizedBox(height: 4),
+              Text('${clip.duration.inSeconds > 0 ? '${clip.duration.inSeconds}s' : 'Clip ${index + 1}'}',
                   style: GoogleFonts.inter(
-                    fontSize: 9,
-                    color: isSelected ? AppTheme.textPrimary : Colors.white54,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 10,
+                    color: isSelected ? Colors.white : Colors.white70,
+                    fontWeight: FontWeight.w700,
                   )),
               if (clip.speed != 1.0)
                 Text('${clip.speed.toStringAsFixed(1)}x',
                     style: GoogleFonts.inter(
-                        fontSize: 7, color: AppTheme.accentCyan)),
+                        fontSize: 8, color: AppTheme.accentCyan)),
             ]),
 
             // Trim indicators
             if (clip.trimStartFraction > 0.01 || clip.trimEndFraction < 0.99)
               Positioned(
-                top: 2,
-                left: 2,
+                bottom: 4,
+                right: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.accentOrange.withAlpha(150),
-                    borderRadius: BorderRadius.circular(3),
+                    color: AppTheme.accentOrange.withAlpha(200),
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Icon(Icons.content_cut, size: 8, color: Colors.white),
+                  child: const Icon(Icons.content_cut, size: 10, color: Colors.white),
                 ),
               ),
 
             // Playback position indicator
             if (playbackFrac != null)
               Positioned(
-                left: playbackFrac * 96,
+                left: playbackFrac * 106,
                 top: 0,
                 bottom: 0,
                 child: Container(
-                  width: 2,
-                  color: Colors.white.withAlpha(200),
-                ),
-              ),
-
-            // Index badge
-            Positioned(
-              bottom: 2,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                color: Colors.black38,
-                child: Text('${index + 1}/${_videoClips.length}',
-                    style: GoogleFonts.inter(
-                        fontSize: 7, color: Colors.white70, fontWeight: FontWeight.w600),
-                    textAlign: TextAlign.center),
-              ),
-            ),
-
-            // Delete button (X mark)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: GestureDetector(
-                onTap: () => _removeClip(index),
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                    shape: BoxShape.circle,
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(color: Colors.white.withAlpha(100), blurRadius: 4),
+                    ],
                   ),
-                  child: const Icon(Icons.close, size: 10, color: Colors.white),
                 ),
               ),
-            ),
           ]),
         ),
       ),
@@ -1471,7 +1533,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       height: 80,
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withAlpha(200),
+        color: AppTheme.darkSurface.withAlpha(240),
         border: Border(top: BorderSide(color: Colors.white.withAlpha(8))),
       ),
       child: ListView(
@@ -1479,21 +1541,25 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         children: [
-          _toolItem('Add', Icons.video_call, _pickAndAddVideo,
-              color: AppTheme.accentCyan),
-          _toolItem('Audio', Icons.music_note, _pickAudio,
-              color: const Color(0xFF00F2EA)),
-          _toolItem('Trim', Icons.content_cut, () => _openPanel('trim'),
-              color: AppTheme.accentOrange),
-          _toolItem('Split', Icons.call_split, _splitClipAtPosition,
-              color: AppTheme.primaryPink),
-          _toolItem('Speed', Icons.speed, () => _openPanel('speed')),
-          _toolItem('Volume', Icons.volume_up, () => _openPanel('volume')),
-          _toolItem('Filters', Icons.filter_vintage, () => _openPanel('filters'),
-              color: const Color(0xFFE040FB)),
-          _toolItem('Bright', Icons.brightness_6, () => _openPanel('brightness')),
-          _toolItem('Text', Icons.text_fields, () => _openPanel('text'),
-              color: const Color(0xFF00E676)),
+          _toolItem('Add', Icons.add_box_rounded, _pickAndAddVideo, color: AppTheme.accentCyan),
+          _toolItem('Audio', Icons.music_note_rounded, _pickAudio, color: const Color(0xFF00F2EA)),
+          if (_selectedClipIndex != null) ...[
+            Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), color: Colors.white24),
+            _toolItem('Trim', Icons.content_cut_rounded, () => _openPanel('trim'), color: AppTheme.accentOrange),
+            _toolItem('Split', Icons.call_split_rounded, _splitClipAtPosition, color: AppTheme.primaryPink),
+            _toolItem('Speed', Icons.speed_rounded, () => _openPanel('speed')),
+            _toolItem('Volume', Icons.volume_up_rounded, () => _openPanel('volume')),
+            _toolItem('Filters', Icons.filter_vintage_rounded, () => _openPanel('filters'), color: const Color(0xFFE040FB)),
+            _toolItem('Bright', Icons.brightness_6_rounded, () => _openPanel('brightness')),
+            _toolItem('Text', Icons.text_fields_rounded, () => _openPanel('text'), color: const Color(0xFF00E676)),
+            Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), color: Colors.white24),
+            _toolItem('Duplicate', Icons.copy_rounded, () => _duplicateClip(_selectedClipIndex!)),
+            _toolItem('Replace', Icons.find_replace_rounded, () => _replaceClip(_selectedClipIndex!)),
+            _toolItem('Delete', Icons.delete_outline_rounded, () => _removeClip(_selectedClipIndex!), color: Colors.redAccent),
+          ] else ...[
+            // Minimal tools when no clip is selected
+            _toolItem('Text', Icons.text_fields_rounded, () => _openPanel('text'), color: const Color(0xFF00E676)),
+          ],
         ],
       ),
     );
@@ -1782,13 +1848,13 @@ class VideoClip {
   }
 }
 
-class TextOverlay {
+class VideoTextOverlay {
   String text;
   Offset offset;
   double fontSize;
   Color color;
 
-  TextOverlay({
+  VideoTextOverlay({
     required this.text,
     required this.offset,
     this.fontSize = 24,

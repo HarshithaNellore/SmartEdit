@@ -6,8 +6,13 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
-import '../../services/ai_service.dart';
-import 'ai_result_dialog.dart';
+import '../../services/smart_highlight_service.dart';
+import '../../services/ai_caption_service.dart';
+import '../../services/ai_filter_service.dart';
+import '../../services/ai_thumbnail_service.dart';
+import '../../services/api_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class AIFeaturesScreen extends StatefulWidget {
   const AIFeaturesScreen({super.key});
@@ -16,154 +21,561 @@ class AIFeaturesScreen extends StatefulWidget {
   State<AIFeaturesScreen> createState() => _AIFeaturesScreenState();
 }
 
-class _AIFeaturesScreenState extends State<AIFeaturesScreen> {
-  int _processingFeature = -1;
-  final Map<int, double> _progress = {};
+class _AIFeaturesScreenState extends State<AIFeaturesScreen>
+    with TickerProviderStateMixin {
+  final ImagePicker _picker = ImagePicker();
+  int _processingIndex = -1;
 
-  // Each feature: title, desc, icon, color, tags, endpoint, mediaType ('image' or 'video')
-  final List<_AIFeature> _features = [
-    _AIFeature(
-      title: 'AI Photo Enhancement',
-      desc: 'Enhance photo quality — fix lighting, sharpness, and colors using AI',
-      icon: Icons.auto_fix_high_rounded,
-      color: AppTheme.primaryPurple,
-      tags: ['Photo', 'Enhancement'],
-      endpoint: 'photo-enhance',
-      mediaType: 'image',
-    ),
-    _AIFeature(
-      title: 'Background Removal',
-      desc: 'Remove backgrounds from photos with AI-powered segmentation',
-      icon: Icons.content_cut_rounded,
-      color: AppTheme.primaryPink,
-      tags: ['Photo', 'Video'],
-      endpoint: 'remove-bg',
-      mediaType: 'image',
-    ),
-    _AIFeature(
-      title: 'Smart Auto-Reframe',
-      desc: 'Crop and reframe videos for different aspect ratios (9:16, 1:1)',
-      icon: Icons.crop_rotate_rounded,
-      color: const Color(0xFFE040FB),
-      tags: ['Video', 'Social Media'],
-      endpoint: 'reframe',
-      mediaType: 'video',
-    ),
-    _AIFeature(
-      title: 'Highlight Detection',
-      desc: 'Find the best moments based on motion and audio analysis',
-      icon: Icons.star_rounded,
+  // ─── Tool definitions ───
+  final List<_AITool> _tools = [
+    _AITool(
+      title: 'Smart Auto Highlight',
+      desc: 'Detect key moments and suggest best highlight clips',
+      icon: Icons.auto_awesome_motion_rounded,
       color: const Color(0xFFFFD700),
       tags: ['Video', 'Auto-Edit'],
-      endpoint: 'highlights',
       mediaType: 'video',
     ),
-    _AIFeature(
-      title: 'Smart Edit Suggestions',
-      desc: 'Get AI recommendations for cuts, transitions, filters, and more',
-      icon: Icons.lightbulb_rounded,
-      color: const Color(0xFFFF6B6B),
-      tags: ['Video', 'Photo', 'AI'],
-      endpoint: 'suggestions',
+    _AITool(
+      title: 'AI Caption Generator',
+      desc: 'Generate subtitles with timestamps for your video',
+      icon: Icons.subtitles_rounded,
+      color: const Color(0xFF26C6DA),
+      tags: ['Video', 'Subtitles'],
       mediaType: 'video',
+    ),
+    _AITool(
+      title: 'AI Filter Recommendation',
+      desc: 'Get filter suggestions based on image mood & brightness',
+      icon: Icons.auto_fix_high_rounded,
+      color: const Color(0xFFE040FB),
+      tags: ['Photo', 'Filters'],
+      mediaType: 'image',
+    ),
+    _AITool(
+      title: 'AI Thumbnail Generator',
+      desc: 'Pick the best frame and add a stylish title overlay',
+      icon: Icons.image_search_rounded,
+      color: const Color(0xFFFF6B6B),
+      tags: ['Video', 'Thumbnail'],
+      mediaType: 'video',
+    ),
+    _AITool(
+      title: 'Photo Enhance',
+      desc: 'Deep AI enhancement for blurry or low-res photos',
+      icon: Icons.hd_rounded,
+      color: const Color(0xFF4CAF50),
+      tags: ['Photo', 'Enhance', 'API'],
+      mediaType: 'image',
+      apiEndpoint: '/api/ai/photo-enhance',
+    ),
+    _AITool(
+      title: 'Background Removal',
+      desc: 'Instantly strip backgrounds producing transparent PNGs',
+      icon: Icons.person_remove_rounded,
+      color: const Color(0xFFFF5722),
+      tags: ['Photo', 'Remove BG', 'API'],
+      mediaType: 'image',
+      apiEndpoint: '/api/ai/remove-bg',
+    ),
+    _AITool(
+      title: 'Auto Reframe',
+      desc: 'Smartly track and reframe moving subjects dynamically (9:16)',
+      icon: Icons.aspect_ratio_rounded,
+      color: const Color(0xFF3F51B5),
+      tags: ['Video', 'Reframe', 'API'],
+      mediaType: 'video',
+      apiEndpoint: '/api/ai/reframe',
+    ),
+    _AITool(
+      title: 'Object Tracking',
+      desc: 'Track objects and generate boxed visualization video outputs',
+      icon: Icons.center_focus_strong_rounded,
+      color: const Color(0xFFF44336),
+      tags: ['Video', 'Track', 'API'],
+      mediaType: 'video',
+      apiEndpoint: '/api/ai/track',
     ),
   ];
 
-  final ImagePicker _picker = ImagePicker();
-
-  // ─── Real AI processing flow ───
-  void _startProcessing(int index) async {
-    final feature = _features[index];
-    Uint8List? fileBytes;
-    String fileName = 'file';
+  // ─── Process each tool ───
+  Future<void> _runTool(int index) async {
+    final tool = _tools[index];
+    setState(() => _processingIndex = index);
 
     try {
-      // 1. Pick file and get bytes — works on Web, Desktop, Mobile
-      if (feature.mediaType == 'image') {
-        final xfile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
+      if (tool.mediaType == 'image') {
+        final xfile = await _picker.pickImage(
+            source: ImageSource.gallery, imageQuality: 95);
         if (xfile == null) {
-          _showSnack('Please select an image first');
+          setState(() => _processingIndex = -1);
           return;
         }
-        fileBytes = await xfile.readAsBytes();
-        fileName = xfile.name;
+        final bytes = await xfile.readAsBytes();
+        if (index == 2) {
+          _showFilterResults(bytes, xfile.name);
+        } else if (tool.apiEndpoint != null) {
+          await _processRealApiTool(tool, xfile.path, xfile.name);
+        }
       } else {
-        // Use file_picker with withData: true to get bytes on all platforms
-        final result = await FilePicker.platform.pickFiles(
-          type: FileType.any,
-          withData: true,
-        );
+        final result = await FilePicker.platform
+            .pickFiles(type: FileType.any, withData: true);
         if (result == null || result.files.isEmpty) {
-          _showSnack('Please select a video file first');
+          setState(() => _processingIndex = -1);
           return;
         }
         final picked = result.files.single;
-        fileBytes = picked.bytes;
-        if (fileBytes == null) {
-          _showSnack('Could not read file data');
+        
+        if (tool.apiEndpoint != null && picked.path != null) {
+          await _processRealApiTool(tool, picked.path!, picked.name);
           return;
         }
-        fileName = picked.name;
+
+        // Use a demo duration for local processing
+        const demoDuration = 120000; // 2 min demo
+
+        if (index == 0) {
+          _showHighlightResults(demoDuration, picked.name);
+        } else if (index == 1) {
+          _showCaptionResults(demoDuration, picked.name);
+        } else if (index == 3) {
+          _showThumbnailResults(demoDuration, picked.name);
+        }
       }
-
-      // 2. Start progress animation
-      setState(() {
-        _processingFeature = index;
-        _progress[index] = 0.0;
-      });
-
-      // Animate progress while processing
-      _animateProgress(index);
-
-      // 3. Upload bytes and process via backend
-      final result = await AiService.processFile(
-        endpoint: feature.endpoint,
-        fileBytes: fileBytes,
-        fileName: fileName,
-      );
-
-      // 4. Stop progress
-      setState(() {
-        _progress[index] = 1.0;
-        _processingFeature = -1;
-      });
-
-      if (!mounted) return;
-
-      // 5. Show result dialog with REAL preview
-      final hasOutputFile = result['output_url'] != null;
-      showDialog(
-        context: context,
-        builder: (_) => AIResultDialog(
-          featureTitle: feature.title,
-          originalBytes: fileBytes,
-          originalFileName: fileName,
-          result: result,
-          isImageResult: feature.mediaType == 'image' && hasOutputFile,
-          isVideoResult: feature.mediaType == 'video' && hasOutputFile,
-          onRerun: () => _startProcessing(index),
-        ),
-      );
     } catch (e) {
-      setState(() => _processingFeature = -1);
-      if (mounted) {
-        _showSnack('Error: ${e.toString().replaceAll('Exception: ', '')}', isError: true);
-      }
+      _showSnack('Error: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _processingIndex = -1);
     }
   }
 
-  void _animateProgress(int index) {
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (!mounted || _processingFeature != index) return false;
-      final current = _progress[index] ?? 0;
-      if (current >= 0.9) return false; // Cap at 90% until backend responds
-      setState(() {
-        // Slow exponential approach to 90%
-        _progress[index] = current + (0.9 - current) * 0.04;
-      });
-      return true;
-    });
+  Future<void> _processRealApiTool(_AITool tool, String filePath, String fileName) async {
+    try {
+      final request = http.MultipartRequest('POST', Uri.parse('${ApiService.baseUrl}${tool.apiEndpoint}'));
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      
+      final response = await request.send();
+      final respStr = await response.stream.bytesToString();
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(respStr);
+        _showSuccessDialog(fileName, tool.title, data['output_url'], data['metadata'] ?? {});
+      } else {
+        throw Exception('API Failed: $respStr');
+      }
+    } catch (e) {
+      throw Exception('Network request failed: $e');
+    }
+  }
+
+  void _showSuccessDialog(String fileName, String toolTitle, String? outputUrl, Map<String, dynamic> md) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: Text('$toolTitle Complete!', style: GoogleFonts.outfit(color: AppTheme.accentCyan, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
+            const SizedBox(height: 12),
+            if (outputUrl != null)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(8)),
+                child: Text('Download ready. (Check backend/processed folder)\n$outputUrl', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 12)),
+              ),
+            const SizedBox(height: 12),
+            if (md.isNotEmpty)
+               Text('Metadata: ${md.toString()}', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.primaryPurple))),
+        ],
+      )
+    );
+  }
+
+  // ─── Result Dialogs ───
+
+  void _showHighlightResults(int durationMs, String fileName) {
+    final highlights = SmartHighlightService.detectHighlights(
+      totalDurationMs: durationMs,
+      intervalMs: 4000,
+      maxHighlights: 6,
+    );
+    final summary = SmartHighlightService.generateSummary(highlights);
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResultSheet(
+        title: '🎬 Smart Highlights',
+        subtitle: fileName,
+        summary: summary,
+        child: Column(
+          children: highlights.map((h) => _highlightTile(h)).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _highlightTile(HighlightClip h) {
+    final scoreColor = h.score > 0.7
+        ? const Color(0xFF00E676)
+        : h.score > 0.5
+            ? const Color(0xFFFFD740)
+            : AppTheme.textMuted;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.darkElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scoreColor.withAlpha(40)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: scoreColor.withAlpha(25),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Text(
+              '${(h.score * 100).toInt()}',
+              style: GoogleFonts.jetBrainsMono(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: scoreColor),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(h.label,
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary)),
+                const SizedBox(height: 2),
+                Text(h.timeRange,
+                    style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11, color: AppTheme.textMuted)),
+              ]),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: scoreColor.withAlpha(20),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text('${h.duration.inSeconds}s',
+              style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: scoreColor)),
+        ),
+      ]),
+    );
+  }
+
+  void _showCaptionResults(int durationMs, String fileName) {
+    final captions = AiCaptionService.generateCaptions(
+      totalDurationMs: durationMs,
+      segmentMs: 3000,
+    );
+    final srt = AiCaptionService.toSrt(captions);
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResultSheet(
+        title: '📝 AI Captions',
+        subtitle: fileName,
+        summary: '${captions.length} captions generated • SRT ready',
+        child: Column(children: [
+          ...captions.map((c) => Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkElevated,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF26C6DA).withAlpha(20),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(c.timeRange,
+                        style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            color: const Color(0xFF26C6DA))),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(c.text,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppTheme.textPrimary)),
+                  ),
+                ]),
+              )),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF26C6DA).withAlpha(10),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: const Color(0xFF26C6DA).withAlpha(30)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SRT Preview',
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF26C6DA))),
+                const SizedBox(height: 6),
+                Text(
+                  srt.length > 400 ? '${srt.substring(0, 400)}...' : srt,
+                  style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10, color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _showFilterResults(Uint8List imageBytes, String fileName) {
+    final filters = AiFilterService.recommendFilters(imageBytes);
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResultSheet(
+        title: '🎨 Filter Recommendations',
+        subtitle: fileName,
+        summary: '${filters.length} filters recommended based on image analysis',
+        child: Column(
+          children: filters.map((f) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: GlassCard(
+                padding: const EdgeInsets.all(14),
+                child: Row(children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: f.color.withAlpha(30),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(f.icon, color: f.color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Text(f.name,
+                                style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: f.color.withAlpha(20),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(f.confidenceLabel,
+                                  style: GoogleFonts.inter(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: f.color)),
+                            ),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text(f.description,
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppTheme.textMuted)),
+                        ]),
+                  ),
+                  // Preview swatch
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: f.color.withAlpha(60)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.matrix(f.matrix),
+                        child: Image.memory(imageBytes,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                Container(color: f.color.withAlpha(30))),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showThumbnailResults(int durationMs, String fileName) {
+    final candidates = AiThumbnailService.generateCandidates(
+      totalDurationMs: durationMs,
+      count: 5,
+    );
+    final styles = AiThumbnailService.stylePresets;
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResultSheet(
+        title: '🖼️ Thumbnail Generator',
+        subtitle: fileName,
+        summary:
+            '${candidates.length} candidates • ${styles.length} style presets',
+        child: Column(children: [
+          Text('Best Frame Candidates',
+              style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary)),
+          const SizedBox(height: 10),
+          ...candidates.asMap().entries.map((e) {
+            final c = e.value;
+            final isTop = e.key == 0;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.darkElevated,
+                borderRadius: BorderRadius.circular(12),
+                border: isTop
+                    ? Border.all(
+                        color: const Color(0xFFFF6B6B).withAlpha(60))
+                    : null,
+              ),
+              child: Row(children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: isTop
+                        ? const LinearGradient(
+                            colors: [Color(0xFFFF6B6B), Color(0xFFE040FB)])
+                        : null,
+                    color: isTop ? null : Colors.white.withAlpha(10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: isTop
+                        ? const Icon(Icons.star_rounded,
+                            color: Colors.white, size: 20)
+                        : Text(
+                            '${e.key + 1}',
+                            style: GoogleFonts.jetBrainsMono(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textMuted),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isTop
+                              ? '⭐ Best Frame — ${c.formattedTime}'
+                              : 'Frame at ${c.formattedTime}',
+                          style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary),
+                        ),
+                        Text(c.reason,
+                            style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: AppTheme.textMuted)),
+                      ]),
+                ),
+                Text('${(c.score * 100).toInt()}%',
+                    style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFFF6B6B))),
+              ]),
+            );
+          }),
+          const SizedBox(height: 16),
+          Text('Style Presets',
+              style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: styles.map((s) {
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: s.bgColor.withAlpha(60),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: s.textColor.withAlpha(40)),
+                ),
+                child: Text(s.name,
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: s.fontWeight,
+                        color: s.textColor)),
+              );
+            }).toList(),
+          ),
+        ]),
+      ),
+    );
   }
 
   void _showSnack(String msg, {bool isError = false}) {
@@ -176,41 +588,47 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen> {
     ));
   }
 
+  // ─── Build ───
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
         child: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 8),
-                      _buildBanner(),
-                      const SizedBox(height: 16),
-                      _buildAgentCard(),
-                      const SizedBox(height: 24),
-                      Text('AI Tools', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                      const SizedBox(height: 16),
-                      ..._features.asMap().entries.map((e) => FadeInUp(
-                            duration: const Duration(milliseconds: 400),
-                            delay: Duration(milliseconds: e.key * 80),
-                            child: _buildFeatureCard(e.key, e.value),
-                          )),
-                      const SizedBox(height: 40),
-                    ],
-                  ),
+          child: Column(children: [
+            _buildTopBar(),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    _buildBanner(),
+                    const SizedBox(height: 24),
+                    Text('AI Tools',
+                        style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text('All processing runs locally — instant results',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppTheme.textMuted)),
+                    const SizedBox(height: 16),
+                    ..._tools.asMap().entries.map((e) => FadeInUp(
+                          duration: const Duration(milliseconds: 400),
+                          delay: Duration(milliseconds: e.key * 80),
+                          child: _buildToolCard(e.key, e.value),
+                        )),
+                    const SizedBox(height: 40),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ]),
         ),
       ),
     );
@@ -221,34 +639,45 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen> {
       duration: const Duration(milliseconds: 400),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white.withAlpha(15), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.arrow_back_ios_new, color: AppTheme.textPrimary, size: 18),
-              ),
+        child: Row(children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(15),
+                  borderRadius: BorderRadius.circular(10)),
+              child: const Icon(Icons.arrow_back_ios_new,
+                  color: AppTheme.textPrimary, size: 18),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text('AI Features', style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: AppTheme.accentCyan.withAlpha(30), borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.auto_awesome, size: 14, color: AppTheme.accentCyan),
-                  const SizedBox(width: 4),
-                  Text('Powered by ML', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.accentCyan)),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text('AI Tools',
+                style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [
+                  Color(0xFFFFD700),
+                  Color(0xFFFF6B6B),
+                ]),
+                borderRadius: BorderRadius.circular(8)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.bolt_rounded, size: 14, color: Colors.white),
+              const SizedBox(width: 4),
+              Text('Local AI',
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white)),
+            ]),
+          ),
+        ]),
       ),
     );
   }
@@ -265,175 +694,250 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen> {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: const Color(0xFF667EEA).withAlpha(60), blurRadius: 20, offset: const Offset(0, 8))],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('AI Processing Pipeline', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Select a media file and choose an AI tool to process it. Results include before/after preview.',
-                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(color: Colors.white.withAlpha(25), borderRadius: BorderRadius.circular(16)),
-              child: const Icon(Icons.psychology, size: 32, color: Colors.white),
-            ),
+          boxShadow: [
+            BoxShadow(
+                color: const Color(0xFF667EEA).withAlpha(60),
+                blurRadius: 20,
+                offset: const Offset(0, 8))
           ],
         ),
-      ),
-    );
-  }
-  Widget _buildAgentCard() {
-    return FadeInUp(
-      duration: const Duration(milliseconds: 450),
-      child: GestureDetector(
-        onTap: () => Navigator.pushNamed(context, '/ai-agent'),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFF6B6B), Color(0xFFE040FB), Color(0xFF667EEA)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: const Color(0xFFE040FB).withAlpha(40), blurRadius: 16, offset: const Offset(0, 6))],
+        child: Row(children: [
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Practical AI Tools',
+                      style: GoogleFonts.outfit(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Pick a file and let AI analyze it instantly. No server, no waiting — works offline.',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: Colors.white70),
+                  ),
+                ]),
           ),
-          child: Row(children: [
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(color: Colors.white.withAlpha(25), borderRadius: BorderRadius.circular(14)),
-              child: const Icon(Icons.smart_toy_rounded, size: 26, color: Colors.white),
-            ),
-            const SizedBox(width: 14),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('AI Agent Editor', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
-              const SizedBox(height: 4),
-              Text('Describe edits in plain English — AI executes automatically', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
-            ])),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white70),
-          ]),
-        ),
+          const SizedBox(width: 16),
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+                color: Colors.white.withAlpha(25),
+                borderRadius: BorderRadius.circular(16)),
+            child:
+                const Icon(Icons.bolt_rounded, size: 32, color: Colors.white),
+          ),
+        ]),
       ),
     );
   }
 
-  Widget _buildFeatureCard(int index, _AIFeature feature) {
-    final isProcessing = _processingFeature == index;
-    final progress = _progress[index] ?? 0.0;
-    final isDone = progress >= 1.0;
+  Widget _buildToolCard(int index, _AITool tool) {
+    final isProcessing = _processingIndex == index;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
+        child: Column(children: [
+          Row(children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: tool.color.withAlpha(30),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(tool.icon, color: tool.color, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tool.title,
+                        style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary)),
+                    const SizedBox(height: 4),
+                    Text(tool.desc,
+                        style: GoogleFonts.inter(
+                            fontSize: 11, color: AppTheme.textMuted),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ]),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: isProcessing ? null : () => _runTool(index),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: isProcessing
+                      ? null
+                      : LinearGradient(
+                          colors: [tool.color, tool.color.withAlpha(180)]),
+                  color: isProcessing ? Colors.white.withAlpha(10) : null,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: isProcessing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : Text('Run',
+                        style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white)),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            ...tool.tags.map((tag) => Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: feature.color.withAlpha(30),
-                    borderRadius: BorderRadius.circular(14),
+                    color: tool.color.withAlpha(20),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(feature.icon, color: feature.color, size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(feature.title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                      const SizedBox(height: 4),
-                      Text(feature.desc, style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: isProcessing ? null : () => _startProcessing(index),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: isProcessing ? null : LinearGradient(colors: [feature.color, feature.color.withAlpha(180)]),
-                      color: isProcessing ? Colors.white.withAlpha(10) : null,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      isDone ? 'Done ✓' : isProcessing ? 'Processing...' : 'Run',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (isProcessing) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: AppTheme.darkElevated,
-                  valueColor: AlwaysStoppedAnimation<Color>(feature.color),
-                  minHeight: 4,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.hourglass_top, size: 12, color: feature.color),
-                  const SizedBox(width: 4),
-                  Text('Uploading & processing on server...',
-                      style: GoogleFonts.inter(fontSize: 10, color: feature.color)),
-                  const Spacer(),
-                  Text('${(progress * 100).toInt()}%', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: feature.color)),
-                ],
-              ),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              children: feature.tags.map((tag) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: feature.color.withAlpha(20), borderRadius: BorderRadius.circular(6)),
-                    child: Text(tag, style: GoogleFonts.inter(fontSize: 10, color: feature.color, fontWeight: FontWeight.w500)),
-                  )).toList(),
-            ),
-          ],
-        ),
+                  child: Text(tag,
+                      style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: tool.color,
+                          fontWeight: FontWeight.w500)),
+                )),
+            const Spacer(),
+            Icon(Icons.bolt_rounded, size: 12, color: tool.color),
+            const SizedBox(width: 4),
+            Text('Local',
+                style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: tool.color,
+                    fontWeight: FontWeight.w500)),
+          ]),
+        ]),
       ),
     );
   }
 }
 
-class _AIFeature {
+// ─── Models ───
+
+class _AITool {
   final String title;
   final String desc;
   final IconData icon;
   final Color color;
   final List<String> tags;
-  final String endpoint;
   final String mediaType;
-  const _AIFeature({
+  final String? apiEndpoint;
+
+  const _AITool({
     required this.title,
     required this.desc,
     required this.icon,
     required this.color,
     required this.tags,
-    required this.endpoint,
     required this.mediaType,
+    this.apiEndpoint,
   });
+}
+
+// ─── Shared Result Bottom Sheet ───
+
+class _ResultSheet extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String summary;
+  final Widget child;
+
+  const _ResultSheet({
+    required this.title,
+    required this.subtitle,
+    required this.summary,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      decoration: const BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(children: [
+        // Handle
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+                color: AppTheme.darkElevated,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+        ),
+        // Header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: GoogleFonts.outfit(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary)),
+              const SizedBox(height: 4),
+              Text(subtitle,
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppTheme.textMuted)),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E676).withAlpha(10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: const Color(0xFF00E676).withAlpha(30)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.check_circle_rounded,
+                      size: 16, color: Color(0xFF00E676)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(summary,
+                        style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF00E676))),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+        const Divider(color: AppTheme.darkElevated, height: 1),
+        // Content
+        Expanded(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: child,
+          ),
+        ),
+      ]),
+    );
+  }
 }

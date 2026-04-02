@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as dart_ui;
@@ -36,7 +37,7 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   double _bluetone = 0.0;
 
   // Text overlays
-  final List<TextOverlay> _textOverlays = [];
+  final List<PhotoTextOverlay> _textOverlays = [];
 
   // Drawing state
   final List<DrawnPath> _drawnPaths = [];
@@ -80,6 +81,11 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   ];
 
   Future<void> _pickImage({ImageSource source = ImageSource.gallery}) async {
+    if (source == ImageSource.camera && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+      _showFeedback('Camera capture is not supported on Desktop versions yet. Please import from Gallery.', isError: true);
+      return;
+    }
+    
     final file = await _picker.pickImage(source: source, imageQuality: 90);
     if (file != null) {
       final bytes = await file.readAsBytes();
@@ -641,7 +647,7 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
             onPressed: () {
               if (controller.text.trim().isNotEmpty) {
                 setState(() {
-                  _textOverlays.add(TextOverlay(
+                  _textOverlays.add(PhotoTextOverlay(
                     text: controller.text.trim(),
                     offset: const Offset(100, 100),
                     fontSize: 28,
@@ -707,13 +713,14 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
     );
   }
 
-  void _showFeedback(String msg) {
+  void _showFeedback(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
-      backgroundColor: AppTheme.darkCard, behavior: SnackBarBehavior.floating,
+      backgroundColor: isError ? Colors.redAccent : AppTheme.darkCard,
+      behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      duration: const Duration(seconds: 1),
+      duration: isError ? const Duration(seconds: 3) : const Duration(seconds: 1),
     ));
   }
 }
@@ -751,13 +758,13 @@ class _ActionItem {
   const _ActionItem(this.label, this.icon, this.onTap);
 }
 
-class TextOverlay {
+class PhotoTextOverlay {
   String text;
   Offset offset;
   double fontSize;
   Color color;
 
-  TextOverlay({required this.text, required this.offset, this.fontSize = 24, this.color = Colors.white});
+  PhotoTextOverlay({required this.text, required this.offset, this.fontSize = 24, this.color = Colors.white});
 }
 
 class DrawnPath {

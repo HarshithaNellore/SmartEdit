@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/project_model.dart';
 import '../services/api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProjectProvider with ChangeNotifier {
   final List<Project> _projects = [];
@@ -37,11 +38,42 @@ class ProjectProvider with ChangeNotifier {
     return sorted.take(10).toList();
   }
 
+  // Local persistence
+  static const String _prefsKey = 'recent_projects';
+
+  Future<void> saveToLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = _projects.map((p) => jsonEncode(p.toJson())).toList();
+      await prefs.setStringList(_prefsKey, encoded);
+    } catch (e) {
+      // Ignore local save errors
+    }
+  }
+
+  Future<void> loadFromLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getStringList(_prefsKey);
+      if (encoded != null && encoded.isNotEmpty) {
+        _projects.clear();
+        for (var item in encoded) {
+          _projects.add(Project.fromJson(jsonDecode(item)));
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      // Ignore local load errors
+    }
+  }
+
   // API Syncing
   Future<void> fetchProjects() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
+
+    await loadFromLocal();
 
     try {
       final response = await ApiService.get('/api/projects/');
@@ -58,6 +90,7 @@ class ProjectProvider with ChangeNotifier {
             modifiedAt: DateTime.parse(item['updated_at']),
           ));
         }
+        await saveToLocal();
       } else {
         _error = 'Failed to load projects: ${response.statusCode}';
       }
@@ -101,6 +134,7 @@ class ProjectProvider with ChangeNotifier {
         _projects.add(project);
         _currentProject = project;
       }
+      await saveToLocal();
     } catch (e) {
       _error = 'Failed to create project: $e';
     } finally {
@@ -126,6 +160,7 @@ class ProjectProvider with ChangeNotifier {
           _currentProject = null;
         }
       }
+      await saveToLocal();
     } catch (e) {
       _error = 'Failed to delete project: $e';
     } finally {
@@ -143,6 +178,7 @@ class ProjectProvider with ChangeNotifier {
         project.name = newName;
         project.modifiedAt = DateTime.now();
       }
+      await saveToLocal();
     } catch (e) {
       _error = 'Failed to rename project: $e';
     } finally {
@@ -154,12 +190,14 @@ class ProjectProvider with ChangeNotifier {
   void addMediaItem(MediaItem item) {
     _currentProject?.mediaItems.add(item);
     _currentProject?.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 
   void removeMediaItem(String itemId) {
     _currentProject?.mediaItems.removeWhere((m) => m.id == itemId);
     _currentProject?.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 
@@ -170,6 +208,7 @@ class ProjectProvider with ChangeNotifier {
     final item = items.removeAt(oldIndex);
     items.insert(newIndex, item);
     _currentProject!.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 
@@ -245,6 +284,7 @@ class ProjectProvider with ChangeNotifier {
     final media = _currentProject?.mediaItems.firstWhere((m) => m.id == mediaId);
     media?.stickers.add(sticker);
     _currentProject?.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 
@@ -268,12 +308,14 @@ class ProjectProvider with ChangeNotifier {
     _currentProject?.collaborators.add(collab);
     _currentProject?.isShared = true;
     _currentProject?.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 
   void addComment(Comment comment) {
     _currentProject?.comments.add(comment);
     _currentProject?.modifiedAt = DateTime.now();
+    saveToLocal();
     notifyListeners();
   }
 

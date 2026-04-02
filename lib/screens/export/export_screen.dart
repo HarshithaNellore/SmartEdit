@@ -23,6 +23,7 @@ class ExportScreen extends StatefulWidget {
   final String? audioPath;
   final int audioTrimStartMs;
   final int audioTrimEndMs;
+  final List<VideoTextOverlay>? textOverlays;
 
   const ExportScreen({
     super.key,
@@ -30,6 +31,7 @@ class ExportScreen extends StatefulWidget {
     this.audioPath,
     this.audioTrimStartMs = 0,
     this.audioTrimEndMs = 0,
+    this.textOverlays,
   });
 
   @override
@@ -49,7 +51,6 @@ class _ExportScreenState extends State<ExportScreen> {
   double _fps = 30;
 
   void _startExport() async {
-    // ─── Guard: Platform Check for Web (Issue 2 Fix) ───
     if (kIsWeb) {
       _showErrorDialog(
           'Video export is currently only supported on the SmartCut mobile and desktop apps. Web export is coming soon!');
@@ -68,8 +69,15 @@ class _ExportScreenState extends State<ExportScreen> {
     });
 
     try {
-      // ─── Get Output Path (Safely inside conditional to prevent plugin crash) ───
-      final appDir = await getTemporaryDirectory();
+      // ─── Get Output Path (Safe for Windows) ───
+      Directory? appDir;
+      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+        appDir = await getDownloadsDirectory();
+      } else {
+        appDir = await getApplicationDocumentsDirectory();
+      }
+      appDir ??= await getTemporaryDirectory();
+      
       final formats = ['mp4', 'mov', 'webm'];
       final ext = formats[_selectedFormat];
       final outputPath = '${appDir.path}/smartcut_export_${DateTime.now().millisecondsSinceEpoch}.$ext';
@@ -98,12 +106,19 @@ class _ExportScreenState extends State<ExportScreen> {
         double clipDuration = 0.0;
         
         try {
-          final probeSession = await FFprobeKit.getMediaInformation(clip.filePath);
-          final info = probeSession.getMediaInformation();
-          if (info != null) {
-            clipDuration = double.tryParse(info.getDuration() ?? '0') ?? 0.0;
-            final streams = info.getStreams();
-            hasAudio = streams.any((s) => s.getType() == 'audio');
+          if (Platform.isWindows) {
+             final result = await Process.run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'default=nw=1:nk=1', clip.filePath], runInShell: true);
+             hasAudio = result.stdout.toString().contains('audio');
+             final durationResult = await Process.run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', clip.filePath], runInShell: true);
+             clipDuration = double.tryParse(durationResult.stdout.toString().trim()) ?? 5.0;
+          } else {
+            final probeSession = await FFprobeKit.getMediaInformation(clip.filePath);
+            final info = probeSession.getMediaInformation();
+            if (info != null) {
+              clipDuration = double.tryParse(info.getDuration() ?? '0') ?? 0.0;
+              final streams = info.getStreams();
+              hasAudio = streams.any((s) => s.getType() == 'audio');
+            }
           }
         } catch (e) {
           DebugLogger.error('EXPORT', 'FFprobe failed on clip $i', error: e);
@@ -129,7 +144,26 @@ class _ExportScreenState extends State<ExportScreen> {
       for (int i = 0; i < widget.clips!.length; i++) {
         filterComplex += '[v$i][a$i]';
       }
-      filterComplex += 'concat=n=${widget.clips!.length}:v=1:a=1[outv][outa]';
+      
+      // If we have text overlays, we need to apply them to the concatenated video
+      // concat -> [rawv][outa]; [rawv] drawtext=... -> [outv]
+      bool hasText = widget.textOverlays != null && widget.textOverlays!.isNotEmpty;
+      filterComplex += 'concat=n=${widget.clips!.length}:v=1:a=1[${hasText ? "rawv" : "outv"}][outa]';
+      
+      if (hasText) {
+        filterComplex += ';[rawv]';
+        for (int i = 0; i < widget.textOverlays!.length; i++) {
+          final textO = widget.textOverlays![i];
+          // Basic drawtext (note: in production FFmpeg requires a fontfile, but some distros have defaults.
+          // Using a simple x,y coordinate mapping without custom font to ensure compatibility).
+          final safeText = textO.text.replaceAll(':', '\\:').replaceAll('\'', '\\\'');
+          filterComplex += 'drawtext=text=\'$safeText\':fontcolor=white:fontsize=48:x=${textO.offset.dx}:y=${textO.offset.dy}';
+          if (i < widget.textOverlays!.length - 1) {
+            filterComplex += ',';
+          }
+        }
+        filterComplex += '[outv]';
+      }
 
       List<String> args = [];
       args.addAll(inputs);
@@ -177,46 +211,79 @@ class _ExportScreenState extends State<ExportScreen> {
       final command = args.map((e) => '"$e"').join(' ');
       DebugLogger.log('EXPORT', 'Executing FFmpeg command...');
 
-      // ─── Real Progress Tracking ───
-      FFmpegKitConfig.enableStatisticsCallback((stats) {
-        if (totalDurationSec > 0 && stats != null) {
-          final timeInMs = stats.getTime();
-          if (timeInMs > 0) {
-            final double percentage = (timeInMs / 1000.0) / totalDurationSec;
-            if (mounted && _isExporting) {
+      if (Platform.isWindows) {
+        // Native process execution for Windows as FFmpegKit doesn't officially support Windows Desktop well
+        try {
+          final process = await Process.start('ffmpeg', args, runInShell: true);
+          
+          process.stderr.transform(SystemEncoding().decoder).listen((data) {
+             // Basic progress bar fallback since it's hard to parse raw text in short time
+             if (mounted && _isExporting) {
+                setState(() {
+                  _exportProgress = (_exportProgress + 0.05).clamp(0.0, 0.95);
+                });
+             }
+          });
+
+          final exitCode = await process.exitCode;
+          if (exitCode == 0) {
+            DebugLogger.log('EXPORT', '✅ Export successful! Saved to $outputPath');
+            if (mounted) {
               setState(() {
-                _exportProgress = percentage.clamp(0.0, 0.99); // Save 1.0 for true completion
+                _exportProgress = 1.0;
+                _isExporting = false;
               });
+              await StatsService.incrementExportCount();
+              _showExportCompleteDialog(outputPath);
+            }
+          } else {
+             throw Exception('FFmpeg process exited with code $exitCode');
+          }
+        } catch (e) {
+           throw Exception('Failed to run FFmpeg on Windows. Is it installed in your PATH? Error: $e');
+        }
+      } else {
+        // ─── Real Progress Tracking (Mobile) ───
+        FFmpegKitConfig.enableStatisticsCallback((stats) {
+          if (totalDurationSec > 0 && stats != null) {
+            final timeInMs = stats.getTime();
+            if (timeInMs > 0) {
+              final double percentage = (timeInMs / 1000.0) / totalDurationSec;
+              if (mounted && _isExporting) {
+                setState(() {
+                  _exportProgress = percentage.clamp(0.0, 0.99); // Save 1.0 for true completion
+                });
+              }
             }
           }
-        }
-      });
+        });
 
-      await FFmpegKit.execute(command).then((session) async {
-        FFmpegKitConfig.enableStatisticsCallback(null); // Clear callback
-        final returnCode = await session.getReturnCode();
-        final logs = await session.getLogsAsString();
+        await FFmpegKit.execute(command).then((session) async {
+          FFmpegKitConfig.enableStatisticsCallback(null); // Clear callback
+          final returnCode = await session.getReturnCode();
+          final logs = await session.getLogsAsString();
 
-        if (ReturnCode.isSuccess(returnCode)) {
-          DebugLogger.log('EXPORT', '✅ Export successful! Saved to $outputPath');
-          if (mounted) {
-            setState(() {
-              _exportProgress = 1.0;
-              _isExporting = false;
-            });
-            await StatsService.incrementExportCount();
-            _showExportCompleteDialog(outputPath);
+          if (ReturnCode.isSuccess(returnCode)) {
+            DebugLogger.log('EXPORT', '✅ Export successful! Saved to $outputPath');
+            if (mounted) {
+              setState(() {
+                _exportProgress = 1.0;
+                _isExporting = false;
+              });
+              await StatsService.incrementExportCount();
+              _showExportCompleteDialog(outputPath);
+            }
+          } else {
+            DebugLogger.error('EXPORT', 'FFmpeg failed with code $returnCode.\nLogs: $logs');
+            if (mounted) {
+              setState(() {
+                _isExporting = false;
+              });
+              _showErrorDialog('Export failed during encoding. Please check your video format.');
+            }
           }
-        } else {
-          DebugLogger.error('EXPORT', 'FFmpeg failed with code $returnCode.\nLogs: $logs');
-          if (mounted) {
-            setState(() {
-              _isExporting = false;
-            });
-            _showErrorDialog('Export failed during encoding. Please check your video format.');
-          }
-        }
-      });
+        });
+      }
     } catch (e, stack) {
       FFmpegKitConfig.enableStatisticsCallback(null);
       DebugLogger.error('EXPORT', 'Technical error during export', error: e, stack: stack);
@@ -325,7 +392,6 @@ class _ExportScreenState extends State<ExportScreen> {
                     children: [
                       const SizedBox(height: 8),
                       if (_isExporting) _buildExportProgress() else ...[
-                        _buildPresetSection(),
                         const SizedBox(height: 24),
                         _buildQualitySection(),
                         const SizedBox(height: 24),
@@ -434,86 +500,7 @@ class _ExportScreenState extends State<ExportScreen> {
     );
   }
 
-  Widget _buildPresetSection() {
-    return FadeInUp(
-      duration: const Duration(milliseconds: 400),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Platform Presets', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 90,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              itemCount: ExportPreset.socialPresets.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (context, index) {
-                final preset = ExportPreset.socialPresets[index];
-                final isSelected = _selectedPreset == index;
-                final platformIcons = {
-                  'Instagram': Icons.camera_alt,
-                  'YouTube': Icons.play_circle,
-                  'TikTok': Icons.music_note,
-                  'Twitter': Icons.alternate_email,
-                  'Facebook': Icons.facebook,
-                  'WhatsApp': Icons.chat,
-                  'Custom': Icons.settings,
-                };
-                final platformColors = {
-                  'Instagram': const Color(0xFFE040FB),
-                  'YouTube': const Color(0xFFFF0000),
-                  'TikTok': const Color(0xFF00F2EA),
-                  'Twitter': const Color(0xFF1DA1F2),
-                  'Facebook': const Color(0xFF1877F2),
-                  'WhatsApp': const Color(0xFF25D366),
-                  'Custom': AppTheme.primaryPurple,
-                };
-
-                return GestureDetector(
-                  onTap: () => setState(() => _selectedPreset = index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 110,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? (platformColors[preset.platform] ?? AppTheme.primaryPurple).withAlpha(30)
-                          : Colors.white.withAlpha(8),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isSelected ? (platformColors[preset.platform] ?? AppTheme.primaryPurple) : Colors.white.withAlpha(15),
-                        width: isSelected ? 1.5 : 1,
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          platformIcons[preset.platform] ?? Icons.settings,
-                          color: platformColors[preset.platform] ?? AppTheme.primaryPurple,
-                          size: 22,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          preset.name,
-                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, color: isSelected ? AppTheme.textPrimary : AppTheme.textMuted),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Platform Presets were removed by User Request
 
   Widget _buildQualitySection() {
     return FadeInUp(
@@ -628,7 +615,6 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   Widget _buildSummary() {
-    final preset = ExportPreset.socialPresets[_selectedPreset];
     return FadeInUp(
       duration: const Duration(milliseconds: 400),
       delay: const Duration(milliseconds: 400),
@@ -639,9 +625,7 @@ class _ExportScreenState extends State<ExportScreen> {
           children: [
             Text('Export Summary', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             const SizedBox(height: 14),
-            _summaryRow('Preset', preset.name),
-            _summaryRow('Resolution', '${preset.width} × ${preset.height}'),
-            _summaryRow('Aspect Ratio', preset.aspectRatio),
+            _summaryRow('Resolution', '${_selectedQuality == 0 ? "720p" : _selectedQuality == 1 ? "1080p" : "4K"}'),
             _summaryRow('Format', _formats[_selectedFormat]),
             _summaryRow('Quality', _qualities[_selectedQuality]),
             _summaryRow('Frame Rate', '${_fps.toInt()} FPS'),

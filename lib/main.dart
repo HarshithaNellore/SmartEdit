@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
@@ -12,13 +13,20 @@ import 'screens/editor/video_editor_screen.dart';
 import 'screens/editor/photo_editor_screen.dart';
 import 'screens/editor/collage_editor_screen.dart';
 import 'screens/ai_features/ai_features_screen.dart';
-import 'screens/ai_features/ai_agent_screen.dart';
+
 import 'screens/collaboration/collaboration_screen.dart';
 import 'screens/export/export_screen.dart';
 import 'screens/settings/settings_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e\nThis is expected if flutterfire configure hasn\'t been run yet.');
+  }
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -59,7 +67,7 @@ class SmartCutApp extends StatelessWidget {
             '/photo-editor': (context) => const PhotoEditorScreen(),
             '/collage-editor': (context) => const CollageEditorScreen(),
             '/ai-features': (context) => const AIFeaturesScreen(),
-            '/ai-agent': (context) => const AIAgentScreen(),
+
             '/collaboration': (context) {
               final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
               return CollaborationScreen(projectId: args?['projectId'] as String? ?? '');
@@ -71,6 +79,7 @@ class SmartCutApp extends StatelessWidget {
                 audioPath: args?['audioPath'] as String?,
                 audioTrimStartMs: args?['audioTrimStartMs'] as int? ?? 0,
                 audioTrimEndMs: args?['audioTrimEndMs'] as int? ?? 0,
+                textOverlays: args?['textOverlays'] as List<VideoTextOverlay>?,
               );
             },
             '/settings': (context) => const SettingsScreen(),

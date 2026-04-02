@@ -52,8 +52,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             children: [
               _buildHomeTab(),
               _buildProjectsTab(),
-              const SizedBox(), // placeholder for create action
-              _buildAITab(),
+              const SizedBox(), // placeholder for center FAB
               _buildProfileTab(),
             ],
           ),
@@ -265,9 +264,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: Text('✨ AI Powered', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.white)),
                     ),
                     const SizedBox(height: 12),
-                    Text('Smart Edit\nwith AI', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, height: 1.2)),
+                    Text('Practical Local\nAI Tools', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, height: 1.2)),
                     const SizedBox(height: 8),
-                    Text('Auto-enhance, remove BG, generate subtitles & more', style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
+                    Text('Auto-highlights, captions, filters, and thumbnails. 100% offline.', style: GoogleFonts.inter(fontSize: 12, color: Colors.white70)),
                   ],
                 ),
               ),
@@ -355,7 +354,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     final gradient = colors[index % colors.length];
     final icon = project.type == ProjectType.video
-        ? Icons.videocam_rounded
+        ? Icons.play_arrow_rounded
         : project.type == ProjectType.photo
             ? Icons.photo_rounded
             : Icons.dashboard_rounded;
@@ -371,43 +370,80 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        width: 160,
+        width: 150,
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: gradient, begin: Alignment.topLeft, end: Alignment.bottomRight),
+          color: AppTheme.darkElevated,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: gradient[0].withAlpha(60), blurRadius: 15, offset: const Offset(0, 6)),
-          ],
+          border: Border.all(color: Colors.white.withAlpha(10), width: 1.5),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            fit: StackFit.expand,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.white.withAlpha(40), borderRadius: BorderRadius.circular(10)),
-                    child: Icon(icon, color: Colors.white, size: 20),
+              // Abstract background wash
+              Positioned(
+                right: -30,
+                bottom: -30,
+                child: Container(
+                  width: 100, height: 100,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: gradient),
                   ),
-                  if (project.isShared)
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(color: Colors.white.withAlpha(40), shape: BoxShape.circle),
-                      child: const Icon(Icons.group, color: Colors.white, size: 14),
-                    ),
-                ],
+                ),
               ),
-              const Spacer(),
-              Text(project.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
-              Text(
-                project.type == ProjectType.video
-                    ? '${project.totalDuration.inMinutes}:${(project.totalDuration.inSeconds % 60).toString().padLeft(2, '0')}'
-                    : project.type.name.toUpperCase(),
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+              // Glassmorphism overlay
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.darkSurface.withAlpha(200),
+                      AppTheme.darkSurface.withAlpha(170),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(colors: gradient),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(color: gradient[0].withAlpha(80), blurRadius: 8, offset: const Offset(0, 3)),
+                            ],
+                          ),
+                          child: Icon(icon, color: Colors.white, size: 20),
+                        ),
+                        if (project.isShared)
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(color: Colors.white.withAlpha(25), shape: BoxShape.circle),
+                            child: const Icon(Icons.group, color: Colors.white, size: 14),
+                          ),
+                      ],
+                    ),
+                    const Spacer(),
+                    Text(project.name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(
+                      project.type == ProjectType.video
+                          ? 'Video • ${project.totalDuration.inMinutes}:${(project.totalDuration.inSeconds % 60).toString().padLeft(2, '0')}'
+                          : project.type.name.toUpperCase(),
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -523,69 +559,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildAITab() {
-    final features = [
-      {'title': 'Auto Enhance', 'desc': 'AI-powered photo & video enhancement', 'icon': Icons.auto_fix_high, 'color': AppTheme.primaryPurple},
-      {'title': 'Background Removal', 'desc': 'Remove backgrounds with one tap', 'icon': Icons.content_cut, 'color': AppTheme.primaryPink},
-      {'title': 'Auto Subtitles', 'desc': 'Generate subtitles from speech', 'icon': Icons.subtitles, 'color': AppTheme.accentCyan},
-      {'title': 'Scene Detection', 'desc': 'Auto-detect scene changes', 'icon': Icons.movie_filter, 'color': AppTheme.accentOrange},
-      {'title': 'Smart Crop', 'desc': 'Auto-reframe for social media', 'icon': Icons.crop, 'color': const Color(0xFFE040FB)},
-      {'title': 'Object Tracking', 'desc': 'Track objects across frames', 'icon': Icons.track_changes, 'color': const Color(0xFF00E676)},
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 16),
-          Text('AI Features', style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
-          const SizedBox(height: 8),
-          Text('Powered by Machine Learning', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-          const SizedBox(height: 20),
-          Expanded(
-            child: GridView.builder(
-              physics: const BouncingScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.85,
-              ),
-              itemCount: features.length,
-              itemBuilder: (context, index) {
-                final f = features[index];
-                return GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/ai-features'),
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: (f['color'] as Color).withAlpha(30),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(f['icon'] as IconData, color: f['color'] as Color, size: 24),
-                        ),
-                        const Spacer(),
-                        Text(f['title'] as String, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                        const SizedBox(height: 4),
-                        Text(f['desc'] as String, style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted), maxLines: 2),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildProfileTab() {
     final auth = context.watch<AuthProvider>();
@@ -896,7 +869,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               _navItem(1, Icons.folder_rounded, 'Projects'),
               const SizedBox(width: 48),
               _collabNavItem(),
-              _navItem(4, Icons.person_rounded, 'Profile'),
+              _navItem(3, Icons.person_rounded, 'Profile'),
             ],
           ),
         ),
