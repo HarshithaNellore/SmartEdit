@@ -4,14 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Use localhost for Web, Windows, and iOS. Use 10.0.2.2 for Android Emulator.
+  // Route connections directly to the production Render backend
   static String get baseUrl {
-    if (kIsWeb) return 'http://localhost:5000';
-    // For mobile devices, we use the local network or the emulator's loopback
-    // Defaulting to localhost for Windows/Desktop and 10.0.2.2 as a fallback for Android
-    return defaultTargetPlatform == TargetPlatform.android 
-        ? 'http://10.0.2.2:5000' 
-        : 'http://localhost:5000';
+    return 'https://smartedit.onrender.com';
   }
 
   static Future<String?> getToken() async {
