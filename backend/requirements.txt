@@ -5,7 +5,8 @@ psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
-pydantic[email-validator]
+pydantic[email]
+email-validator
 alembic
 python-multipart
 opencv-python-headless
