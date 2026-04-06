@@ -5,19 +5,19 @@ import 'api_service.dart';
 class AuthService {
   // Enable demo mode for testing without backend
   // Set to true to use offline credentials
-  static const DEMO_MODE = false; // 👈 CHANGE THIS TO false WHEN BACKEND IS READY
+  static const demoMode = false; // 👈 CHANGE THIS TO false WHEN BACKEND IS READY
   
-  // Demo credentials (valid only in DEMO_MODE)
-  static const DEMO_EMAIL = 'test@smartcut.app';
-  static const DEMO_PASSWORD = 'password123';
-  static const DEMO_TOKEN = 'demo_token_12345_offline_testing_mode';
+  // Demo credentials (valid only in demoMode)
+  static const demoEmail = 'test@smartcut.app';
+  static const demoPassword = 'password123';
+  static const demoToken = 'demo_token_12345_offline_testing_mode';
 
   /// Demo user data for offline testing
   static UserModel _getDemoUser() {
     return UserModel(
       id: 'demo_user_001',
       name: 'Test User',
-      email: DEMO_EMAIL,
+      email: demoEmail,
       avatarColor: '#6C63FF',
     );
   }
@@ -29,12 +29,12 @@ class AuthService {
     required String password,
   }) async {
     // Demo mode: Create user locally
-    if (DEMO_MODE) {
-      if (email == DEMO_EMAIL) {
+    if (demoMode) {
+      if (email == demoEmail) {
         throw Exception('Email already registered');
       }
       // Accept any other registration in demo mode
-      await ApiService.setToken(DEMO_TOKEN);
+      await ApiService.setToken(demoToken);
       final user = UserModel(
         id: 'demo_${DateTime.now().millisecondsSinceEpoch}',
         name: name,
@@ -42,7 +42,7 @@ class AuthService {
         avatarColor: '#6C63FF',
       );
       return {
-        'token': DEMO_TOKEN,
+        'token': demoToken,
         'user': user,
       };
     }
@@ -73,16 +73,16 @@ class AuthService {
     required String password,
   }) async {
     // Demo mode: Check hardcoded credentials
-    if (DEMO_MODE) {
-      if (email == DEMO_EMAIL && password == DEMO_PASSWORD) {
-        await ApiService.setToken(DEMO_TOKEN);
+    if (demoMode) {
+      if (email == demoEmail && password == demoPassword) {
+        await ApiService.setToken(demoToken);
         return {
-          'token': DEMO_TOKEN,
+          'token': demoToken,
           'user': _getDemoUser(),
         };
-      } else if (DEMO_MODE) {
+      } else if (demoMode) {
         // In demo mode, reject with helpful message
-        throw Exception('Demo login: Use $DEMO_EMAIL / $DEMO_PASSWORD');
+        throw Exception('Demo login: Use $demoEmail / $demoPassword');
       }
     }
 
@@ -109,9 +109,9 @@ class AuthService {
   /// Get current user from token.
   static Future<UserModel> getMe() async {
     // Demo mode: Return demo user
-    if (DEMO_MODE) {
+    if (demoMode) {
       final token = await ApiService.getToken();
-      if (token == DEMO_TOKEN) {
+      if (token == demoToken) {
         return _getDemoUser();
       }
       throw Exception('Not authenticated');

@@ -605,8 +605,8 @@ class _CollageEditorScreenState extends State<CollageEditorScreen>
           _slots[index] = _slots[draggedIndex];
           _slots[draggedIndex] = temp;
           // Maintain selection visually
-          if (_selectedSlotIndex == draggedIndex) _selectedSlotIndex = index;
-          else if (_selectedSlotIndex == index) _selectedSlotIndex = draggedIndex;
+          if (_selectedSlotIndex == draggedIndex) { _selectedSlotIndex = index; }
+          else if (_selectedSlotIndex == index) { _selectedSlotIndex = draggedIndex; }
         });
       },
       builder: (context, candidateData, rejectedData) {

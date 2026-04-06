@@ -69,11 +69,11 @@ class SmartCutApp extends StatelessWidget {
             '/ai-features': (context) => const AIFeaturesScreen(),
 
             '/collaboration': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+              final args = ModalRoute.of(context)?.settings.arguments as Map?;
               return CollaborationScreen(projectId: args?['projectId'] as String? ?? '');
             },
             '/export': (context) {
-              final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+              final args = ModalRoute.of(context)?.settings.arguments as Map?;
               return ExportScreen(
                 clips: args?['clips'] as List<VideoClip>?,
                 audioPath: args?['audioPath'] as String?,
@@ -143,7 +143,13 @@ class _SplashScreenState extends State<SplashScreen>
     Future.delayed(const Duration(milliseconds: 2500), () async {
       if (!mounted) return;
       final auth = context.read<AuthProvider>();
-      final isLoggedIn = await auth.tryAutoLogin();
+      bool isLoggedIn = false;
+      try {
+        isLoggedIn = await auth.tryAutoLogin()
+            .timeout(const Duration(seconds: 8), onTimeout: () => false);
+      } catch (_) {
+        isLoggedIn = false;
+      }
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(
           isLoggedIn ? '/home' : '/login',

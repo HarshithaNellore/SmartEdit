@@ -1,6 +1,4 @@
 import 'dart:math';
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
 
 /// Rule-based highlight detection for videos.
 /// Analyzes video frames at intervals and scores them by contrast/motion.

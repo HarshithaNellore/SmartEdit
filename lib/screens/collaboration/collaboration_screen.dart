@@ -212,7 +212,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
         return ListView.separated(
           padding: const EdgeInsets.all(16), physics: const BouncingScrollPhysics(),
           itemCount: projects.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          separatorBuilder: (context, index) => const SizedBox(height: 10),
           itemBuilder: (context, index) {
             final p = projects[index];
             return FadeInUp(
@@ -432,7 +432,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
                 : ListView.separated(
                     padding: const EdgeInsets.all(16), physics: const BouncingScrollPhysics(),
                     itemCount: provider.comments.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (context, index) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final c = provider.comments[index];
                       final timestamp = DateTime.tryParse(c['created_at'] ?? '') ?? DateTime.now();
@@ -575,7 +575,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 16), physics: const BouncingScrollPhysics(),
                     itemCount: provider.versions.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (context, index) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final v = provider.versions[index];
                       final isLatest = index == 0;
@@ -726,6 +726,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
             onPressed: () async {
               final provider = context.read<CollaborationProvider>();
               final success = await provider.saveVersion(notes: notesController.text.trim());
+              if (!mounted) return;
               Navigator.pop(ctx);
               _showFeedback(success ? 'Version saved!' : (provider.error ?? 'Failed'));
             },
@@ -834,6 +835,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
               }
               final provider = context.read<CollaborationProvider>();
               final success = await provider.addCollaborator(emailCtrl.text.trim(), selectedRole);
+              if (!mounted) return;
               Navigator.pop(ctx);
               if (success) {
                 _showFeedback('Collaborator invited as $selectedRole');

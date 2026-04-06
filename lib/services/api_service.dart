@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -39,7 +38,8 @@ class ApiService {
 
   static Future<http.Response> get(String path, {bool auth = true}) async {
     final headers = await _headers(auth: auth);
-    return http.get(Uri.parse('$baseUrl$path'), headers: headers);
+    return http.get(Uri.parse('$baseUrl$path'), headers: headers)
+        .timeout(const Duration(seconds: 15));
   }
 
   static Future<http.Response> post(String path,
@@ -49,7 +49,7 @@ class ApiService {
       Uri.parse('$baseUrl$path'),
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
-    );
+    ).timeout(const Duration(seconds: 15));
   }
 
   static Future<http.Response> put(String path,
@@ -59,11 +59,12 @@ class ApiService {
       Uri.parse('$baseUrl$path'),
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
-    );
+    ).timeout(const Duration(seconds: 15));
   }
 
   static Future<http.Response> delete(String path, {bool auth = true}) async {
     final headers = await _headers(auth: auth);
-    return http.delete(Uri.parse('$baseUrl$path'), headers: headers);
+    return http.delete(Uri.parse('$baseUrl$path'), headers: headers)
+        .timeout(const Duration(seconds: 15));
   }
 }

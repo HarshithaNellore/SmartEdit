@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart'; // Add kIsWeb
 import 'package:flutter/material.dart';
@@ -6,14 +5,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:ffmpeg_kit_flutter_min_gpl/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_min_gpl/ffprobe_kit.dart'; // Add FFprobe
-import 'package:ffmpeg_kit_flutter_min_gpl/return_code.dart';
-import 'package:ffmpeg_kit_flutter_min_gpl/ffmpeg_kit_config.dart';
+import 'package:ffmpeg_kit_flutter_new_min_gpl/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min_gpl/ffprobe_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_min_gpl/return_code.dart';
+import 'package:ffmpeg_kit_flutter_new_min_gpl/ffmpeg_kit_config.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/gradient_button.dart';
-import '../../models/project_model.dart';
 import '../../services/stats_service.dart';
 import '../../services/debug_logger.dart'; // Add logger
 import '../editor/video_editor_screen.dart';
@@ -39,7 +37,6 @@ class ExportScreen extends StatefulWidget {
 }
 
 class _ExportScreenState extends State<ExportScreen> {
-  int _selectedPreset = 0;
   int _selectedQuality = 1;
   bool _isExporting = false;
   double _exportProgress = 0.0;
@@ -212,12 +209,11 @@ class _ExportScreenState extends State<ExportScreen> {
       DebugLogger.log('EXPORT', 'Executing FFmpeg command...');
 
       if (Platform.isWindows) {
-        // Native process execution for Windows as FFmpegKit doesn't officially support Windows Desktop well
+        // Native process execution for Windows
         try {
           final process = await Process.start('ffmpeg', args, runInShell: true);
           
           process.stderr.transform(SystemEncoding().decoder).listen((data) {
-             // Basic progress bar fallback since it's hard to parse raw text in short time
              if (mounted && _isExporting) {
                 setState(() {
                   _exportProgress = (_exportProgress + 0.05).clamp(0.0, 0.95);
@@ -245,13 +241,13 @@ class _ExportScreenState extends State<ExportScreen> {
       } else {
         // ─── Real Progress Tracking (Mobile) ───
         FFmpegKitConfig.enableStatisticsCallback((stats) {
-          if (totalDurationSec > 0 && stats != null) {
+          if (totalDurationSec > 0) {
             final timeInMs = stats.getTime();
             if (timeInMs > 0) {
               final double percentage = (timeInMs / 1000.0) / totalDurationSec;
               if (mounted && _isExporting) {
                 setState(() {
-                  _exportProgress = percentage.clamp(0.0, 0.99); // Save 1.0 for true completion
+                  _exportProgress = percentage.clamp(0.0, 0.99);
                 });
               }
             }
@@ -259,7 +255,7 @@ class _ExportScreenState extends State<ExportScreen> {
         });
 
         await FFmpegKit.execute(command).then((session) async {
-          FFmpegKitConfig.enableStatisticsCallback(null); // Clear callback
+          FFmpegKitConfig.enableStatisticsCallback(null);
           final returnCode = await session.getReturnCode();
           final logs = await session.getLogsAsString();
 
@@ -625,7 +621,7 @@ class _ExportScreenState extends State<ExportScreen> {
           children: [
             Text('Export Summary', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             const SizedBox(height: 14),
-            _summaryRow('Resolution', '${_selectedQuality == 0 ? "720p" : _selectedQuality == 1 ? "1080p" : "4K"}'),
+            _summaryRow('Resolution', _selectedQuality == 0 ? "720p" : _selectedQuality == 1 ? "1080p" : "4K"),
             _summaryRow('Format', _formats[_selectedFormat]),
             _summaryRow('Quality', _qualities[_selectedQuality]),
             _summaryRow('Frame Rate', '${_fps.toInt()} FPS'),

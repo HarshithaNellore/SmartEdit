@@ -119,7 +119,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
         }
       } else {
         final result = await FilePicker.platform
-            .pickFiles(type: FileType.any, withData: true);
+            .pickFiles(type: FileType.any, withData: false);
         if (result == null || result.files.isEmpty) {
           setState(() => _processingIndex = -1);
           return;
@@ -441,7 +441,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                         colorFilter: ColorFilter.matrix(f.matrix),
                         child: Image.memory(imageBytes,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
+                            errorBuilder: (context, error, stackTrace) =>
                                 Container(color: f.color.withAlpha(30))),
                       ),
                     ),

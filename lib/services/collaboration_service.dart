@@ -30,7 +30,7 @@ class CollaborationService {
         if (res.statusCode == 200 && !controller.isClosed) {
           controller.add(jsonDecode(res.body).cast<Map<String, dynamic>>());
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     return controller.stream;
   }
@@ -62,7 +62,7 @@ class CollaborationService {
             controller.add(jsonList.cast<Map<String, dynamic>>());
           }
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     controller.onCancel = () => timer.cancel();
     Future.microtask(() async {
@@ -71,7 +71,7 @@ class CollaborationService {
         if (res.statusCode == 200 && !controller.isClosed) {
           controller.add(jsonDecode(res.body).cast<Map<String, dynamic>>());
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     return controller.stream;
   }
@@ -108,7 +108,7 @@ class CollaborationService {
             controller.add(jsonList.cast<Map<String, dynamic>>());
           }
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     controller.onCancel = () => timer.cancel();
     Future.microtask(() async {
@@ -117,7 +117,7 @@ class CollaborationService {
         if (res.statusCode == 200 && !controller.isClosed) {
           controller.add(jsonDecode(res.body).cast<Map<String, dynamic>>());
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     return controller.stream;
   }
@@ -148,7 +148,7 @@ class CollaborationService {
             controller.add(jsonList.cast<Map<String, dynamic>>());
           }
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     controller.onCancel = () => timer.cancel();
     Future.microtask(() async {
@@ -157,7 +157,7 @@ class CollaborationService {
         if (res.statusCode == 200 && !controller.isClosed) {
           controller.add(jsonDecode(res.body).cast<Map<String, dynamic>>());
         }
-      } catch (e) {}
+      } catch (_) {}
     });
     return controller.stream;
   }

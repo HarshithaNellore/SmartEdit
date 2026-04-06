@@ -5,7 +5,6 @@ import 'package:animate_do/animate_do.dart';
 import '../../theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/glass_card.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -113,7 +112,7 @@ class _LoginScreenState extends State<LoginScreen>
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Demo Mode Banner
-                  if (AuthService.DEMO_MODE)
+                  if (AuthService.demoMode)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Container(

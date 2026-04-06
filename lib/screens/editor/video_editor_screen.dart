@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
+
 import 'package:video_player/video_player.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
@@ -18,7 +18,6 @@ class VideoEditorScreen extends StatefulWidget {
 class _VideoEditorScreenState extends State<VideoEditorScreen>
     with TickerProviderStateMixin {
   // ── Core state ──
-  final ImagePicker _picker = ImagePicker();
   final List<VideoClip> _videoClips = [];
   int? _selectedClipIndex;
   VideoPlayerController? _controller;
@@ -850,13 +849,13 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
           
           // Brightness overlays works 100% on HTML view
           if (brightness > 0)
-            Container(color: Colors.white.withOpacity(brightness)),
+            Container(color: Colors.white.withAlpha((brightness * 255).toInt())),
           if (brightness < 0)
-            Container(color: Colors.black.withOpacity(-brightness)),
+            Container(color: Colors.black.withAlpha((-brightness * 255).toInt())),
             
           // Contrast overlay simulation
           if (contrast < 1.0)
-            Container(color: Colors.grey.withOpacity(1.0 - contrast)),
+            Container(color: Colors.grey.withAlpha(((1.0 - contrast) * 255).toInt())),
           if (contrast > 1.0)
             Container(color: Colors.transparent), // High contrast requires active shader
         ],
@@ -1478,7 +1477,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                   color: isSelected ? AppTheme.primaryPink : AppTheme.textMuted,
                   size: 24),
               const SizedBox(height: 4),
-              Text('${clip.duration.inSeconds > 0 ? '${clip.duration.inSeconds}s' : 'Clip ${index + 1}'}',
+              Text(clip.duration.inSeconds > 0 ? '${clip.duration.inSeconds}s' : 'Clip ${index + 1}',
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     color: isSelected ? Colors.white : Colors.white70,

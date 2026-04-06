@@ -20,7 +20,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _highQualityPreview = true;
   String _defaultExport = '1080p';
   String _theme = 'Dark';
-  bool _cacheCleared = false;
 
   @override
   void initState() {
@@ -279,7 +278,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() => _cacheCleared = true);
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text('Cache cleared successfully', style: GoogleFonts.inter(fontSize: 13)),
                 backgroundColor: AppTheme.accentCyan, behavior: SnackBarBehavior.floating,

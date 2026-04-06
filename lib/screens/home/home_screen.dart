@@ -329,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
                     itemCount: projects.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
+                    separatorBuilder: (context, index) => const SizedBox(width: 14),
                     itemBuilder: (context, index) {
                       final project = projects[index];
                       return _buildProjectCard(project, index);
@@ -481,7 +481,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     : ListView.separated(
                         physics: const BouncingScrollPhysics(),
                         itemCount: provider.projects.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        separatorBuilder: (context, index) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final project = provider.projects[index];
                           return _buildProjectListItem(project);
@@ -768,6 +768,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 final fileName = result.files.single.name;
                 final filePath = result.files.single.path!;
                 await context.read<ProjectProvider>().createProject(fileName, ProjectType.video);
+                if (!mounted) return;
+                Navigator.pop(context);
                 if (mounted) {
                   Navigator.pushNamed(context, '/video-editor', arguments: {
                     'initialVideoPath': filePath,
@@ -783,8 +785,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               desc: 'Edit photos with filters, AI tools & more',
               color: AppTheme.primaryPink,
               onTap: () async {
-                Navigator.pop(context);
                 await context.read<ProjectProvider>().createProject('Untitled Photo', ProjectType.photo);
+                if (!mounted) return;
+                Navigator.pop(context);
                 if (mounted) {
                   Navigator.pushNamed(context, '/photo-editor');
                 }
@@ -797,8 +800,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               desc: 'Combine photos and videos in one project',
               color: AppTheme.accentCyan,
               onTap: () async {
-                Navigator.pop(context);
                 await context.read<ProjectProvider>().createProject('Untitled Project', ProjectType.mixed);
+                if (!mounted) return;
+                Navigator.pop(context);
                 if (mounted) {
                   Navigator.pushNamed(context, '/mixed-editor');
                 }
