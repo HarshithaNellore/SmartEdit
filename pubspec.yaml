@@ -29,7 +29,7 @@ dependencies:
   glass_kit: ^4.0.1
   http: ^1.2.1
   video_player: ^2.8.2
-  shared_preferences: ^2.3.3
+  shared_preferences: ^2.5.5
   ffmpeg_kit_flutter_new_min_gpl: ^2.1.1
   file_picker: ^10.3.10
   crop_image: ^1.0.17
