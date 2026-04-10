@@ -28,23 +28,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadPreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _autoSave = prefs.getBool('autoSave') ?? true;
-      _notifications = prefs.getBool('notifications') ?? true;
-      _analytics = prefs.getBool('analytics') ?? false;
-      _hapticFeedback = prefs.getBool('hapticFeedback') ?? true;
-      _highQualityPreview = prefs.getBool('highQualityPreview') ?? true;
-      _defaultExport = prefs.getString('defaultExport') ?? '1080p';
-      _theme = prefs.getString('theme') ?? 'Dark';
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _autoSave = prefs.getBool('autoSave') ?? true;
+        _notifications = prefs.getBool('notifications') ?? true;
+        _analytics = prefs.getBool('analytics') ?? false;
+        _hapticFeedback = prefs.getBool('hapticFeedback') ?? true;
+        _highQualityPreview = prefs.getBool('highQualityPreview') ?? true;
+        _defaultExport = prefs.getString('defaultExport') ?? '1080p';
+        _theme = prefs.getString('theme') ?? 'Dark';
+      });
+    } catch (_) {
+      // Use defaults if SharedPreferences is unavailable
+    }
   }
 
   Future<void> _savePref(String key, dynamic value) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (value is bool) await prefs.setBool(key, value);
-    if (value is String) await prefs.setString(key, value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (value is bool) await prefs.setBool(key, value);
+      if (value is String) await prefs.setString(key, value);
+    } catch (_) {
+      // Ignore save errors
+    }
   }
 
   @override

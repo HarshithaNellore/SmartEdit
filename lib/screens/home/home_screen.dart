@@ -761,20 +761,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               desc: 'Edit videos with timeline, effects & more',
               color: AppTheme.primaryPurple,
               onTap: () async {
-                final result = await FilePicker.platform.pickFiles(type: FileType.any);
-                if (result == null || result.files.single.path == null) return;
+                try {
+                  final result = await FilePicker.platform.pickFiles(type: FileType.video);
+                  if (result == null || result.files.single.path == null) return;
 
-                Navigator.pop(context);
-                final fileName = result.files.single.name;
-                final filePath = result.files.single.path!;
-                await context.read<ProjectProvider>().createProject(fileName, ProjectType.video);
-                if (!mounted) return;
-                Navigator.pop(context);
-                if (mounted) {
-                  Navigator.pushNamed(context, '/video-editor', arguments: {
-                    'initialVideoPath': filePath,
-                    'initialVideoName': fileName,
-                  });
+                  Navigator.pop(context);
+                  final fileName = result.files.single.name;
+                  final filePath = result.files.single.path!;
+                  await context.read<ProjectProvider>().createProject(fileName, ProjectType.video);
+                  if (!mounted) return;
+                  if (mounted) {
+                    Navigator.pushNamed(context, '/video-editor', arguments: {
+                      'initialVideoPath': filePath,
+                      'initialVideoName': fileName,
+                    });
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Failed to pick video: $e', style: GoogleFonts.inter(fontSize: 13)),
+                      backgroundColor: Colors.redAccent,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ));
+                  }
                 }
               },
             ),
@@ -790,21 +801,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 Navigator.pop(context);
                 if (mounted) {
                   Navigator.pushNamed(context, '/photo-editor');
-                }
-              },
-            ),
-            const SizedBox(height: 12),
-            _createOption(
-              icon: Icons.dashboard_rounded,
-              title: 'Mixed Project',
-              desc: 'Combine photos and videos in one project',
-              color: AppTheme.accentCyan,
-              onTap: () async {
-                await context.read<ProjectProvider>().createProject('Untitled Project', ProjectType.mixed);
-                if (!mounted) return;
-                Navigator.pop(context);
-                if (mounted) {
-                  Navigator.pushNamed(context, '/mixed-editor');
                 }
               },
             ),

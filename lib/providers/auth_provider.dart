@@ -13,6 +13,21 @@ class AuthProvider with ChangeNotifier {
   String? get error => _error;
   bool get isAuthenticated => _isAuthenticated;
 
+  /// Sanitize error messages so raw PlatformExceptions aren't shown to users.
+  static String _friendlyError(dynamic e) {
+    final raw = e.toString();
+    if (raw.contains('PlatformException') || raw.contains('channel-error')) {
+      return 'Unable to connect. Please restart the app and try again.';
+    }
+    if (raw.contains('TimeoutException') || raw.contains('timed out')) {
+      return 'Server is starting up, please wait a moment and try again.';
+    }
+    if (raw.contains('SocketException') || raw.contains('Connection refused')) {
+      return 'No internet connection. Please check your network.';
+    }
+    return raw.replaceAll('Exception: ', '');
+  }
+
   /// Try to restore session from stored token.
   Future<bool> tryAutoLogin() async {
     try {
@@ -24,7 +39,11 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return true;
     } catch (_) {
-      await AuthService.logout();
+      try {
+        await AuthService.logout();
+      } catch (_) {
+        // SharedPreferences may be unavailable; ignore cleanup errors
+      }
       _isAuthenticated = false;
       notifyListeners();
       return false;
@@ -52,7 +71,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = _friendlyError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -78,7 +97,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = _friendlyError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -86,7 +105,11 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await AuthService.logout();
+    try {
+      await AuthService.logout();
+    } catch (_) {
+      // Ignore errors during logout cleanup
+    }
     _user = null;
     _isAuthenticated = false;
     _error = null;

@@ -92,11 +92,23 @@ class _CollageEditorScreenState extends State<CollageEditorScreen>
   }
 
   Future<void> _pickPhoto(int index) async {
-    final file = await _picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() => _slots[index].imageBytes = bytes);
+    try {
+      final file = await _picker.pickImage(
+          source: ImageSource.gallery, imageQuality: 85);
+      if (file != null) {
+        final bytes = await file.readAsBytes();
+        setState(() => _slots[index].imageBytes = bytes);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to pick image. Please check app permissions.', style: GoogleFonts.inter(fontSize: 13)),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+      debugPrint('Collage image picker error: $e');
     }
   }
 

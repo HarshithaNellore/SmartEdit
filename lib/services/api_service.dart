@@ -1,26 +1,64 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Route connections directly to the production Render backend
+  // Route connections directly to local backend to resolve timeout issues
   static String get baseUrl {
-    return 'https://smartedit.onrender.com';
+    return 'http://localhost:5000';
+  }
+
+  // In-memory fallback when SharedPreferences is unavailable
+  static String? _inMemoryToken;
+  static bool _sharedPrefsAvailable = true;
+
+  /// Get a SharedPreferences instance, or null if unavailable.
+  static Future<SharedPreferences?> _getSafePrefs() async {
+    if (!_sharedPrefsAvailable) return null;
+    try {
+      return await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint('SharedPreferences unavailable, using in-memory fallback: $e');
+      _sharedPrefsAvailable = false;
+      return null;
+    }
   }
 
   static Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    final prefs = await _getSafePrefs();
+    if (prefs != null) {
+      try {
+        return prefs.getString('auth_token');
+      } catch (e) {
+        debugPrint('SharedPreferences getToken error: $e');
+      }
+    }
+    return _inMemoryToken;
   }
 
   static Future<void> setToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+    _inMemoryToken = token;
+    final prefs = await _getSafePrefs();
+    if (prefs != null) {
+      try {
+        await prefs.setString('auth_token', token);
+      } catch (e) {
+        debugPrint('SharedPreferences setToken error: $e');
+      }
+    }
   }
 
   static Future<void> removeToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+    _inMemoryToken = null;
+    final prefs = await _getSafePrefs();
+    if (prefs != null) {
+      try {
+        await prefs.remove('auth_token');
+      } catch (e) {
+        debugPrint('SharedPreferences removeToken error: $e');
+      }
+    }
   }
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
@@ -36,10 +74,13 @@ class ApiService {
     return headers;
   }
 
+  // Longer timeout (60s) to account for Render free-tier cold starts
+  static const _timeout = Duration(seconds: 60);
+
   static Future<http.Response> get(String path, {bool auth = true}) async {
     final headers = await _headers(auth: auth);
     return http.get(Uri.parse('$baseUrl$path'), headers: headers)
-        .timeout(const Duration(seconds: 15));
+        .timeout(_timeout);
   }
 
   static Future<http.Response> post(String path,
@@ -49,7 +90,7 @@ class ApiService {
       Uri.parse('$baseUrl$path'),
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(_timeout);
   }
 
   static Future<http.Response> put(String path,
@@ -59,12 +100,12 @@ class ApiService {
       Uri.parse('$baseUrl$path'),
       headers: headers,
       body: body != null ? jsonEncode(body) : null,
-    ).timeout(const Duration(seconds: 15));
+    ).timeout(_timeout);
   }
 
   static Future<http.Response> delete(String path, {bool auth = true}) async {
     final headers = await _headers(auth: auth);
     return http.delete(Uri.parse('$baseUrl$path'), headers: headers)
-        .timeout(const Duration(seconds: 15));
+        .timeout(_timeout);
   }
 }

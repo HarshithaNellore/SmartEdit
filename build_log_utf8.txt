@@ -1,0 +1,129 @@
+﻿Running Gradle task 'assembleRelease'...                        
+flutter : lib/screens/home/
+home_screen.dart:168:20: 
+Error: The method 
+'ImagePicker' isn't 
+defined for the type 
+'_HomeScreenState'.
+At line:1 char:1
++ flutter build apk 2>&1 | 
+Out-File -Encoding utf8 
+build_log_utf8.txt
++ ~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (lib  
+  /screens/hom...meScree   
+ nState'.:String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+ - '_HomeScreenState' is 
+from 'package:smartcut/scre
+ens/home/home_screen.dart' 
+('lib/screens/home/home_scr
+een.dart').
+Try correcting the name to 
+the name of an existing 
+method, or defining a 
+method named 'ImagePicker'.
+    final picker = 
+ImagePicker();
+                   
+^^^^^^^^^^^
+lib/screens/home/home_scree
+n.dart:169:49: Error: The 
+getter 'ImageSource' isn't 
+defined for the type 
+'_HomeScreenState'.
+ - '_HomeScreenState' is 
+from 'package:smartcut/scre
+ens/home/home_screen.dart' 
+('lib/screens/home/home_scr
+een.dart').
+Try correcting the name to 
+the name of an existing 
+getter, or defining a 
+getter or field named 
+'ImageSource'.
+    final file = await 
+picker.pickImage(source: 
+ImageSource.gallery, 
+imageQuality: 90);
+                           
+                     
+^^^^^^^^^^^
+lib/screens/home/home_scree
+n.dart:746:13: Error: The 
+method 
+'_projectTypeOption' isn't 
+defined for the type 
+'_HomeScreenState'.
+ - '_HomeScreenState' is 
+from 'package:smartcut/scre
+ens/home/home_screen.dart' 
+('lib/screens/home/home_scr
+een.dart').
+Try correcting the name to 
+the name of an existing 
+method, or defining a 
+method named 
+'_projectTypeOption'.
+            
+_projectTypeOption(
+            
+^^^^^^^^^^^^^^^^^^
+lib/screens/home/home_scree
+n.dart:788:13: Error: The 
+method 
+'_projectTypeOption' isn't 
+defined for the type 
+'_HomeScreenState'.
+ - '_HomeScreenState' is 
+from 'package:smartcut/scre
+ens/home/home_screen.dart' 
+('lib/screens/home/home_scr
+een.dart').
+Try correcting the name to 
+the name of an existing 
+method, or defining a 
+method named 
+'_projectTypeOption'.
+            
+_projectTypeOption(
+            
+^^^^^^^^^^^^^^^^^^
+Target 
+kernel_snapshot_program 
+failed: Exception
+
+
+FAILURE: Build failed with 
+an exception.
+
+* What went wrong:
+Execution failed for task '
+:app:compileFlutterBuildRel
+ease'.
+> Process 'command 'C:\flut
+ter\bin\flutter.bat'' 
+finished with non-zero 
+exit value 1
+
+* Try:
+> Run with --stacktrace 
+option to get the stack 
+trace.
+> Run with --info or 
+--debug option to get more 
+log output.
+> Run with --scan to get 
+full insights.
+> Get more help at 
+https://help.gradle.org.
+
+BUILD FAILED in 14s
+Running Gradle task 'assembleRelease'...                           14.9s
+Gradle task 
+assembleRelease failed 
+with exit code 1

@@ -295,12 +295,20 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         _isPlaying = newPlaying;
       });
     }
+
+    if (_audioController != null && _audioDuration.inMilliseconds > 0) {
+       if (newPlaying && !_audioController!.value.isPlaying && newPos.inMilliseconds < (_trimEnd * _duration.inMilliseconds).round() - 50) {
+           _audioController!.play();
+       } else if (!newPlaying && _audioController!.value.isPlaying) {
+           _audioController!.pause();
+       }
+    }
   }
 
   Future<void> _pickAndAddVideo() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: FileType.video,
         allowMultiple: true,
       );
       if (result == null || result.files.isEmpty || !mounted) return;
@@ -418,7 +426,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   Future<void> _pickAudio() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: FileType.audio,
       );
       if (result != null && result.files.single.path != null) {
         setState(() {
@@ -468,6 +476,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
 
   void _seekTo(Duration pos) {
     _controller?.seekTo(pos);
+    if (_audioController != null && _duration.inMilliseconds > 0) {
+      final fraction = pos.inMilliseconds / _duration.inMilliseconds;
+      final audioMs = fraction * _audioDuration.inMilliseconds;
+      _audioController?.seekTo(Duration(milliseconds: audioMs.round()));
+    }
   }
 
   void _replay() {

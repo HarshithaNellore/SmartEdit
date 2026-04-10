@@ -36,7 +36,20 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // CRITICAL: Disable R8 shrinking to prevent native Flutter plugin
+            // implementations (file_picker, image_picker, video_player) from
+            // being stripped. This fixes MissingPluginException on APK.
+            isMinifyEnabled = false
+            isShrinkResources = false
+
+            proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
         }
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 }
 

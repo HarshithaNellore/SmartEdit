@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/project_model.dart';
 import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 class ProjectProvider with ChangeNotifier {
   final List<Project> _projects = [];
@@ -133,10 +134,22 @@ class ProjectProvider with ChangeNotifier {
         );
         _projects.add(project);
         _currentProject = project;
+      } else {
+        throw Exception('API returned status ${response.statusCode}');
       }
       await saveToLocal();
     } catch (e) {
-      _error = 'Failed to create project: $e';
+      _error = 'Failed to create project dynamically on server, falling back to local storage: $e';
+      final project = Project(
+        id: const Uuid().v4(),
+        name: name,
+        type: type,
+        createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
+      );
+      _projects.add(project);
+      _currentProject = project;
+      await saveToLocal();
     } finally {
       _isLoading = false;
       notifyListeners();

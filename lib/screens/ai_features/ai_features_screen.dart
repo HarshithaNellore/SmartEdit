@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,8 @@ import '../../services/ai_thumbnail_service.dart';
 import '../../services/api_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:video_player/video_player.dart';
+import '../../utils/download_helper.dart';
 
 class AIFeaturesScreen extends StatefulWidget {
   const AIFeaturesScreen({super.key});
@@ -34,14 +37,6 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
       icon: Icons.auto_awesome_motion_rounded,
       color: const Color(0xFFFFD700),
       tags: ['Video', 'Auto-Edit'],
-      mediaType: 'video',
-    ),
-    _AITool(
-      title: 'AI Caption Generator',
-      desc: 'Generate subtitles with timestamps for your video',
-      icon: Icons.subtitles_rounded,
-      color: const Color(0xFF26C6DA),
-      tags: ['Video', 'Subtitles'],
       mediaType: 'video',
     ),
     _AITool(
@@ -78,24 +73,6 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
       mediaType: 'image',
       apiEndpoint: '/api/ai/remove-bg',
     ),
-    _AITool(
-      title: 'Auto Reframe',
-      desc: 'Smartly track and reframe moving subjects dynamically (9:16)',
-      icon: Icons.aspect_ratio_rounded,
-      color: const Color(0xFF3F51B5),
-      tags: ['Video', 'Reframe', 'API'],
-      mediaType: 'video',
-      apiEndpoint: '/api/ai/reframe',
-    ),
-    _AITool(
-      title: 'Object Tracking',
-      desc: 'Track objects and generate boxed visualization video outputs',
-      icon: Icons.center_focus_strong_rounded,
-      color: const Color(0xFFF44336),
-      tags: ['Video', 'Track', 'API'],
-      mediaType: 'video',
-      apiEndpoint: '/api/ai/track',
-    ),
   ];
 
   // ─── Process each tool ───
@@ -105,29 +82,58 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
 
     try {
       if (tool.mediaType == 'image') {
-        final xfile = await _picker.pickImage(
-            source: ImageSource.gallery, imageQuality: 95);
+        // Image picker with its own error handling
+        XFile? xfile;
+        try {
+          xfile = await _picker.pickImage(
+              source: ImageSource.gallery, imageQuality: 95);
+        } catch (e) {
+          debugPrint('Image picker error in AI tools: $e');
+          _showSnack('Failed to open gallery. Please check app permissions.', isError: true);
+          return;
+        }
         if (xfile == null) {
           setState(() => _processingIndex = -1);
           return;
         }
+
         final bytes = await xfile.readAsBytes();
-        if (index == 2) {
+        if (tool.title == 'AI Filter Recommendation') {
           _showFilterResults(bytes, xfile.name);
         } else if (tool.apiEndpoint != null) {
-          await _processRealApiTool(tool, xfile.path, xfile.name);
+          try {
+            final data = await _processRealApiTool(tool, bytes, xfile.name);
+            _showSuccessDialog(xfile.name, tool.title, data['output_url'], data['metadata'] ?? {});
+          } catch (e) {
+            _showSnack('AI processing failed. The server may be unavailable, please try again later.', isError: true);
+            debugPrint('API error: $e');
+          }
         }
       } else {
-        final result = await FilePicker.platform
-            .pickFiles(type: FileType.any, withData: false);
-        if (result == null || result.files.isEmpty) {
-          setState(() => _processingIndex = -1);
+        // File picker with its own error handling
+        PlatformFile? picked;
+        try {
+          final result = await FilePicker.platform
+              .pickFiles(type: FileType.video, withData: true);
+          if (result == null || result.files.isEmpty) {
+            setState(() => _processingIndex = -1);
+            return;
+          }
+          picked = result.files.single;
+        } catch (e) {
+          debugPrint('FilePicker error in AI tools: $e');
+          _showSnack('Failed to open file picker. Please check app permissions.', isError: true);
           return;
         }
-        final picked = result.files.single;
-        
-        if (tool.apiEndpoint != null && picked.path != null) {
-          await _processRealApiTool(tool, picked.path!, picked.name);
+
+        if (tool.apiEndpoint != null && picked.bytes != null) {
+          try {
+            final data = await _processRealApiTool(tool, picked.bytes!, picked.name);
+            _showSuccessDialog(picked.name, tool.title, data['output_url'], data['metadata'] ?? {});
+          } catch (e) {
+            _showSnack('AI processing failed. The server may be unavailable, please try again later.', isError: true);
+            debugPrint('API error: $e');
+          }
           return;
         }
 
@@ -149,19 +155,18 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
     }
   }
 
-  Future<void> _processRealApiTool(_AITool tool, String filePath, String fileName) async {
+  Future<Map<String, dynamic>> _processRealApiTool(_AITool tool, Uint8List fileBytes, String fileName) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse('${ApiService.baseUrl}${tool.apiEndpoint}'));
-      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      request.files.add(http.MultipartFile.fromBytes('file', fileBytes, filename: fileName));
       
-      final response = await request.send();
+      final response = await request.send().timeout(const Duration(seconds: 120)); // Captions can take longer
       final respStr = await response.stream.bytesToString();
       
       if (response.statusCode == 200) {
-        final data = jsonDecode(respStr);
-        _showSuccessDialog(fileName, tool.title, data['output_url'], data['metadata'] ?? {});
+        return jsonDecode(respStr) as Map<String, dynamic>;
       } else {
-        throw Exception('API Failed: $respStr');
+        throw Exception('API returned status ${response.statusCode}: $respStr');
       }
     } catch (e) {
       throw Exception('Network request failed: $e');
@@ -170,30 +175,54 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
 
   void _showSuccessDialog(String fileName, String toolTitle, String? outputUrl, Map<String, dynamic> md) {
     if (!mounted) return;
+    
+    final fullUrl = outputUrl != null ? '${ApiService.baseUrl}$outputUrl' : null;
+    final isVideo = outputUrl?.toLowerCase().endsWith('.mp4') ?? outputUrl?.toLowerCase().endsWith('.mov') ?? false;
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.darkSurface,
         title: Text('$toolTitle Complete!', style: GoogleFonts.outfit(color: AppTheme.accentCyan, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
-            const SizedBox(height: 12),
-            if (outputUrl != null)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(8)),
-                child: Text('Download ready. (Check backend/processed folder)\n$outputUrl', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 12)),
-              ),
-            const SizedBox(height: 12),
-            if (md.isNotEmpty)
-               Text('Metadata: ${md.toString()}', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (fullUrl != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: isVideo 
+                    ? _VideoPreviewWidget(url: fullUrl) 
+                    : Image.network(fullUrl, fit: BoxFit.contain, height: 250),
+                ),
+                const SizedBox(height: 16),
+              ],
+              Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
+              const SizedBox(height: 8),
+              if (fullUrl != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(8)),
+                  child: SelectableText('Download Link (Right-click preview to save, or copy this URL):\n$fullUrl', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 12)),
+                ),
+              const SizedBox(height: 12),
+              if (md.isNotEmpty)
+                 Text('Metadata: ${md.toString()}', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
+            ],
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.primaryPurple))),
+          if (fullUrl != null)
+             TextButton.icon(
+               icon: const Icon(Icons.download_rounded, size: 16, color: AppTheme.primaryPurple),
+               label: Text('Save', style: GoogleFonts.inter(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)),
+               onPressed: () {
+                 downloadFile(fullUrl, '${toolTitle.replaceAll(' ', '_')}_output');
+                 _showSnack('Downloading $toolTitle result...');
+               },
+             ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary))),
         ],
       )
     );
@@ -286,6 +315,82 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                   color: scoreColor)),
         ),
       ]),
+    );
+  }
+
+  void _showApiCaptionResults(Map<String, dynamic> metadata, String fileName) {
+    final subs = metadata['subtitles'] as List<dynamic>? ?? [];
+    final srtContent = metadata['srt_content'] as String? ?? '';
+    final detectedLang = metadata['language'] ?? 'unknown';
+
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ResultSheet(
+        title: '📝 AI Captions',
+        subtitle: fileName,
+        summary: '${subs.length} captions generated • Source: $detectedLang • Auto-translated to English',
+        child: Column(children: [
+          ...subs.map((c) {
+            return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkElevated,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(children: [
+                   // just show start time
+                   Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF26C6DA).withAlpha(20),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text('${c['start']}s',
+                        style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            color: const Color(0xFF26C6DA))),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(c['text'] as String,
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppTheme.textPrimary)),
+                  ),
+                ]),
+              );
+            }),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF26C6DA).withAlpha(10),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF26C6DA).withAlpha(30)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('SRT Preview',
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF26C6DA))),
+                const SizedBox(height: 6),
+                Text(
+                  srtContent.length > 400 ? '${srtContent.substring(0, 400)}...' : srtContent,
+                  style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10, color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -938,6 +1043,46 @@ class _ResultSheet extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+class _VideoPreviewWidget extends StatefulWidget {
+  final String url;
+  const _VideoPreviewWidget({required this.url});
+
+  @override
+  State<_VideoPreviewWidget> createState() => _VideoPreviewWidgetState();
+}
+
+class _VideoPreviewWidgetState extends State<_VideoPreviewWidget> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+      ..initialize().then((_) {
+        setState(() {});
+        _controller.setLooping(true);
+        _controller.play();
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_controller.value.isInitialized) {
+      return Container(height: 200, color: Colors.black26, child: const Center(child: CircularProgressIndicator()));
+    }
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: VideoPlayer(_controller),
     );
   }
 }

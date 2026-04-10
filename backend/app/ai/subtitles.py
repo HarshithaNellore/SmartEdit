@@ -44,9 +44,9 @@ def generate_subtitles(input_path: str, output_dir: str) -> dict:
     audio_path = str(out_dir / f"{input_p.stem}_audio.wav")
     _extract_audio(input_path, audio_path)
 
-    # Step 2: Transcribe with faster-whisper (use 'base' model for speed)
+    # Step 2: Transcribe with faster-whisper (use 'base' model for speed) and translate to English
     model = WhisperModel("base", device="cpu", compute_type="int8")
-    segments, info = model.transcribe(audio_path, beam_size=5)
+    segments, info = model.transcribe(audio_path, beam_size=5, task="translate")
 
     # Step 3: Build SRT
     srt_lines = []

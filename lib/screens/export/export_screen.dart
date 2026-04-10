@@ -68,7 +68,7 @@ class _ExportScreenState extends State<ExportScreen> {
     try {
       // ─── Get Output Path (Safe for Windows) ───
       Directory? appDir;
-      if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
         appDir = await getDownloadsDirectory();
       } else {
         appDir = await getApplicationDocumentsDirectory();
@@ -103,7 +103,7 @@ class _ExportScreenState extends State<ExportScreen> {
         double clipDuration = 0.0;
         
         try {
-          if (Platform.isWindows) {
+          if (!kIsWeb && Platform.isWindows) {
              final result = await Process.run('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'default=nw=1:nk=1', clip.filePath], runInShell: true);
              hasAudio = result.stdout.toString().contains('audio');
              final durationResult = await Process.run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', clip.filePath], runInShell: true);
@@ -126,8 +126,8 @@ class _ExportScreenState extends State<ExportScreen> {
 
         DebugLogger.log('EXPORT', 'Clip $i: hasAudio=$hasAudio, duration=$clipDuration');
 
-        // Scale to common resolution, padding cleanly to maintain aspect ratio
-        filterComplex += '[$i:v]scale=$targetW:$targetH:force_original_aspect_ratio=decrease,pad=$targetW:$targetH:(ow-iw)/2:(oh-ih)/2,setsar=1[v$i];';
+        // Scale to common resolution, padding cleanly to maintain aspect ratio with even dimensions
+        filterComplex += '[$i:v]scale=$targetW:$targetH:force_original_aspect_ratio=decrease,pad=$targetW:$targetH:-1:-1:color=black,setsar=1[v$i];';
         
         // Handle audio tracks safely
         if (hasAudio) {
@@ -208,7 +208,7 @@ class _ExportScreenState extends State<ExportScreen> {
       final command = args.map((e) => '"$e"').join(' ');
       DebugLogger.log('EXPORT', 'Executing FFmpeg command...');
 
-      if (Platform.isWindows) {
+      if (!kIsWeb && Platform.isWindows) {
         // Native process execution for Windows
         try {
           final process = await Process.start('ffmpeg', args, runInShell: true);

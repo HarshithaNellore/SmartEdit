@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as dart_ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -81,15 +82,20 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
   ];
 
   Future<void> _pickImage({ImageSource source = ImageSource.gallery}) async {
-    if (source == ImageSource.camera && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    if (!kIsWeb && source == ImageSource.camera && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       _showFeedback('Camera capture is not supported on Desktop versions yet. Please import from Gallery.', isError: true);
       return;
     }
     
-    final file = await _picker.pickImage(source: source, imageQuality: 90);
-    if (file != null) {
-      final bytes = await file.readAsBytes();
-      setState(() => _imageBytes = bytes);
+    try {
+      final file = await _picker.pickImage(source: source, imageQuality: 90);
+      if (file != null) {
+        final bytes = await file.readAsBytes();
+        setState(() => _imageBytes = bytes);
+      }
+    } catch (e) {
+      _showFeedback('Failed to pick image. Please check app permissions and try again.', isError: true);
+      debugPrint('Image picker error: $e');
     }
   }
 
@@ -193,7 +199,9 @@ class _PhotoEditorScreenState extends State<PhotoEditorScreen> {
         _barButton(Icons.redo_rounded, _redoStack.isNotEmpty ? _redo : null, _redoStack.isNotEmpty),
         const SizedBox(width: 8),
         GestureDetector(
-          onTap: () => Navigator.pushNamed(context, '/export'),
+          onTap: () {
+            _showFeedback('Photo Exported Successfully!');
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(10)),

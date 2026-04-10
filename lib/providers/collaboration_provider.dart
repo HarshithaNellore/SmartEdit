@@ -94,13 +94,17 @@ class CollaborationProvider with ChangeNotifier {
   // ─── Collaborators ───
 
   Future<bool> addCollaborator(String email, String role) async {
-    if (_currentProjectId == null || _currentProjectId!.isEmpty) return false;
+    if (_currentProjectId == null || _currentProjectId!.isEmpty) {
+      _error = 'No project selected. Please create a project first.';
+      notifyListeners();
+      return false;
+    }
     try {
       await CollaborationService.addCollaborator(_currentProjectId!, email, role);
       _error = null;
       return true;
     } catch (e, stack) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = 'Could not invite collaborator. Please check your internet connection and try again.';
       DebugLogger.error('COLLAB', 'addCollaborator FAILED', error: e, stack: stack);
       notifyListeners();
       return false;
@@ -124,13 +128,17 @@ class CollaborationProvider with ChangeNotifier {
   // ─── Comments ───
 
   Future<bool> addComment(String text, {String? attachment}) async {
-    if (_currentProjectId == null || _currentProjectId!.isEmpty) return false;
+    if (_currentProjectId == null || _currentProjectId!.isEmpty) {
+      _error = 'No project selected.';
+      notifyListeners();
+      return false;
+    }
     try {
       await CollaborationService.addComment(_currentProjectId!, text, attachment: attachment);
       _error = null;
       return true;
     } catch (e, stack) {
-      _error = e.toString().replaceAll('Exception: ', '');
+      _error = 'Could not add comment. Please check your connection.';
       DebugLogger.error('COLLAB', 'addComment FAILED', error: e, stack: stack);
       notifyListeners();
       return false;
