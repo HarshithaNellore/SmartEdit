@@ -7,6 +7,7 @@ import 'theme/app_theme.dart';
 import 'providers/project_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collaboration_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/editor/video_editor_screen.dart';
@@ -53,12 +54,15 @@ class SmartCutApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ProjectProvider()),
         ChangeNotifierProvider(create: (_) => CollaborationProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: MaterialApp(
-        title: 'SmartCut',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const SplashScreen(),
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'SmartCut',
+            debugShowCheckedModeBanner: false,
+            theme: themeProvider.themeData,
+            home: const SplashScreen(),
         onGenerateRoute: (settings) {
           final routes = <String, WidgetBuilder>{
             '/home': (context) => const HomeScreen(),
@@ -97,6 +101,8 @@ class SmartCutApp extends StatelessWidget {
             );
           }
           return null;
+        },
+      );
         },
       ),
     );

@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../theme/app_theme.dart';
 
 class CollageEditorScreen extends StatefulWidget {
@@ -130,6 +133,17 @@ class _CollageEditorScreenState extends State<CollageEditorScreen>
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
+
+      Directory? appDir;
+      if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+        appDir = await getDownloadsDirectory();
+      } else {
+        appDir = await getApplicationDocumentsDirectory();
+      }
+      appDir ??= await getTemporaryDirectory();
+      final filePath = '${appDir.path}/smartcut_collage_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(filePath);
+      await file.writeAsBytes(pngBytes);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

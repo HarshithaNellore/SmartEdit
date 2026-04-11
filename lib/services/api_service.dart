@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -6,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   // Route connections directly to local backend to resolve timeout issues
   static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:5000';
+    if (Platform.isAndroid) return 'http://192.168.2.130:5000';
     return 'http://localhost:5000';
   }
 

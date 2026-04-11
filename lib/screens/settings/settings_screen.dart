@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_theme.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/glass_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -38,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _hapticFeedback = prefs.getBool('hapticFeedback') ?? true;
         _highQualityPreview = prefs.getBool('highQualityPreview') ?? true;
         _defaultExport = prefs.getString('defaultExport') ?? '1080p';
-        _theme = prefs.getString('theme') ?? 'Dark';
+        _theme = context.read<ThemeProvider>().themeName;
       });
     } catch (_) {
       // Use defaults if SharedPreferences is unavailable
@@ -80,7 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _sectionTitle('Editor'),
                       _toggleItem('High Quality Preview', 'Use full resolution in preview', Icons.hd_rounded, _highQualityPreview, (v) { setState(() => _highQualityPreview = v); _savePref('highQualityPreview', v); }),
                       _dropdownItem('Default Export Quality', Icons.tune_rounded, _defaultExport, ['720p', '1080p', '4K'], (v) { setState(() => _defaultExport = v); _savePref('defaultExport', v); }),
-                      _dropdownItem('Theme', Icons.palette_rounded, _theme, ['Dark', 'AMOLED', 'Midnight'], (v) { setState(() => _theme = v); _savePref('theme', v); }),
+                      _dropdownItem('Theme', Icons.palette_rounded, _theme, ['Light', 'Dark', 'AMOLED', 'Midnight'], (v) { setState(() => _theme = v); context.read<ThemeProvider>().setTheme(v); }),
                       const SizedBox(height: 20),
                       _sectionTitle('Privacy'),
                       _toggleItem('Share Analytics', 'Help improve SmartCut', Icons.analytics_rounded, _analytics, (v) { setState(() => _analytics = v); _savePref('analytics', v); }),

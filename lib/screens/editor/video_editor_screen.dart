@@ -426,7 +426,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   Future<void> _pickAudio() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: FileType.any,
       );
       if (result != null && result.files.single.path != null) {
         setState(() {
@@ -435,7 +435,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         });
         
         _audioController?.dispose();
-        _audioController = VideoPlayerController.file(File(_backgroundAudioPath!));
+        if (kIsWeb) {
+          _audioController = VideoPlayerController.networkUrl(Uri.parse(_backgroundAudioPath!));
+        } else {
+          _audioController = VideoPlayerController.file(File(_backgroundAudioPath!));
+        }
         await _audioController!.initialize();
         await _audioController!.setVolume(1.0);
         await _audioController!.setLooping(true);
@@ -1558,14 +1562,20 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
           if (_selectedClipIndex != null) ...[
             Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), color: Colors.white24),
             _toolItem('Trim', Icons.content_cut_rounded, () => _openPanel('trim'), color: AppTheme.accentOrange),
-            _toolItem('Split', Icons.call_split_rounded, _splitClipAtPosition, color: AppTheme.primaryPink),
+            _toolItem('Split', Icons.call_split_rounded, () {
+              _triggerActionHighlight('Split');
+              _splitClipAtPosition();
+            }, color: AppTheme.primaryPink),
             _toolItem('Speed', Icons.speed_rounded, () => _openPanel('speed')),
             _toolItem('Volume', Icons.volume_up_rounded, () => _openPanel('volume')),
             _toolItem('Filters', Icons.filter_vintage_rounded, () => _openPanel('filters'), color: const Color(0xFFE040FB)),
-            _toolItem('Bright', Icons.brightness_6_rounded, () => _openPanel('brightness')),
+            _toolItem('Bright', Icons.brightness_6_rounded, () => _openPanel('brightness'), panelId: 'brightness'),
             _toolItem('Text', Icons.text_fields_rounded, () => _openPanel('text'), color: const Color(0xFF00E676)),
             Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12), color: Colors.white24),
-            _toolItem('Duplicate', Icons.copy_rounded, () => _duplicateClip(_selectedClipIndex!)),
+            _toolItem('Duplicate', Icons.copy_rounded, () {
+              _triggerActionHighlight('Duplicate');
+              _duplicateClip(_selectedClipIndex!);
+            }),
             _toolItem('Replace', Icons.find_replace_rounded, () => _replaceClip(_selectedClipIndex!)),
             _toolItem('Delete', Icons.delete_outline_rounded, () => _removeClip(_selectedClipIndex!), color: Colors.redAccent),
           ] else ...[
@@ -1683,9 +1693,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     );
   }
 
+  String? _highlightedTool;
+
+  void _triggerActionHighlight(String label) {
+    setState(() => _highlightedTool = label);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _highlightedTool = null);
+    });
+  }
+
   Widget _toolItem(String label, IconData icon, VoidCallback onTap,
-      {Color? color}) {
-    final isActive = _activePanel == label.toLowerCase();
+      {Color? color, String? panelId}) {
+    final isActive = _activePanel == (panelId ?? label.toLowerCase()) || _highlightedTool == label;
     final c = color ?? AppTheme.textSecondary;
     return GestureDetector(
       onTap: onTap,
@@ -1802,8 +1821,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   void _showFeedback(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
-      backgroundColor: AppTheme.darkCard,
+      content: Text(msg, style: GoogleFonts.inter(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600)),
+      backgroundColor: AppTheme.primaryPurple,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       duration: const Duration(seconds: 2),

@@ -163,14 +163,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _importMedia() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
-    if (file != null && mounted) {
-      Navigator.pushNamed(context, '/photo-editor');
-    }
-  }
-
   Widget _buildQuickActions() {
     return FadeInUp(
       duration: const Duration(milliseconds: 600),
@@ -195,7 +187,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _quickActionItem(Icons.file_download_rounded, 'Import', AppTheme.accentCyan, _importMedia),
               _quickActionItem(Icons.people_alt_rounded, 'Share', const Color(0xFF4CAF50), () {
                 final provider = context.read<ProjectProvider>();
                 final pid = provider.currentProject?.id ?? (provider.projects.isNotEmpty ? provider.projects.first.id : '');
