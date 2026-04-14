@@ -5,7 +5,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:gal/gal.dart';
 import 'package:ffmpeg_kit_flutter_new_min_gpl/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min_gpl/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_min_gpl/return_code.dart';
@@ -68,9 +67,19 @@ class _ExportScreenState extends State<ExportScreen> {
     });
 
     try {
-      // ─── Get Output Path ───
-      // Always use temporary directory for the raw ffmpeg output
-      final appDir = await getTemporaryDirectory();
+      // ─── Get Output Path (Safe for Windows) ───
+      Directory? appDir;
+      if (!kIsWeb) {
+        if (Platform.isAndroid) {
+          appDir = Directory('/storage/emulated/0/Download');
+          if (!await appDir.exists()) await appDir.create(recursive: true);
+        } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+          appDir = await getDownloadsDirectory();
+        } else {
+          appDir = await getApplicationDocumentsDirectory();
+        }
+      }
+      appDir ??= await getTemporaryDirectory();
 
       final formats = ['mp4', 'mov', 'webm'];
       final ext = formats[_selectedFormat];
@@ -265,7 +274,7 @@ class _ExportScreenState extends State<ExportScreen> {
                 _isExporting = false;
               });
               await StatsService.incrementExportCount();
-              _handleExportSuccess(outputPath);
+              _showExportCompleteDialog(outputPath);
             }
           } else {
             throw Exception('FFmpeg process exited with code $exitCode');
@@ -307,7 +316,7 @@ class _ExportScreenState extends State<ExportScreen> {
                 _isExporting = false;
               });
               await StatsService.incrementExportCount();
-              _handleExportSuccess(outputPath);
+              _showExportCompleteDialog(outputPath);
             }
           } else {
             DebugLogger.error(
@@ -340,22 +349,6 @@ class _ExportScreenState extends State<ExportScreen> {
         });
         _showErrorDialog('Technical error: ${_exportError ?? 'Unknown'}');
       }
-    }
-  }
-
-  Future<void> _handleExportSuccess(String outputPath) async {
-    try {
-      if (Platform.isAndroid || Platform.isIOS) {
-        final hasAccess = await Gal.requestAccess(toAlbum: true);
-        if (hasAccess) {
-          await Gal.putVideo(outputPath, album: 'SmartEdit');
-        }
-      }
-    } catch (e) {
-      DebugLogger.error('EXPORT', 'Failed to save to gallery', error: e);
-    }
-    if (mounted) {
-      _showExportCompleteDialog(outputPath);
     }
   }
 

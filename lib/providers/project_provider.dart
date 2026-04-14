@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/project_model.dart';
-
+import '../services/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -68,7 +68,7 @@ class ProjectProvider with ChangeNotifier {
     }
   }
 
-  // Offline-first project loading — no backend dependency
+  // API Syncing
   Future<void> fetchProjects() async {
     _isLoading = true;
     _error = null;
@@ -76,30 +76,84 @@ class ProjectProvider with ChangeNotifier {
 
     await loadFromLocal();
 
-    _isLoading = false;
-    notifyListeners();
+    try {
+      final response = await ApiService.get('/api/projects/');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        _projects.clear();
+        for (var item in data) {
+          // Map backend simplified schema to Flutter full model
+          _projects.add(Project(
+            id: item['id'],
+            name: item['name'],
+            type: _parseProjectType(item['type']),
+            createdAt: DateTime.parse(item['created_at']),
+            modifiedAt: DateTime.parse(item['updated_at']),
+          ));
+        }
+        await saveToLocal();
+      } else {
+        _error = 'Failed to load projects: ${response.statusCode}';
+      }
+    } catch (e) {
+      _error = 'Connection error: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
+  ProjectType _parseProjectType(String type) {
+    switch (type) {
+      case 'video': return ProjectType.video;
+      case 'photo': return ProjectType.photo;
+      case 'mixed': return ProjectType.mixed;
+      default: return ProjectType.video;
+    }
+  }
 
-
-  // Offline-first project management
+  // Project management
   Future<void> createProject(String name, ProjectType type) async {
     _isLoading = true;
     notifyListeners();
 
-    final project = Project(
-      id: const Uuid().v4(),
-      name: name,
-      type: type,
-      createdAt: DateTime.now(),
-      modifiedAt: DateTime.now(),
-    );
-    _projects.add(project);
-    _currentProject = project;
-    await saveToLocal();
+    try {
+      final response = await ApiService.post('/api/projects/', body: {
+        'name': name,
+        'type': type.toString().split('.').last,
+      });
 
-    _isLoading = false;
-    notifyListeners();
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final project = Project(
+          id: data['id'],
+          name: data['name'],
+          type: type,
+          createdAt: DateTime.parse(data['created_at']),
+          modifiedAt: DateTime.parse(data['updated_at']),
+        );
+        _projects.add(project);
+        _currentProject = project;
+      } else {
+        throw Exception('API returned status ${response.statusCode}');
+      }
+      await saveToLocal();
+    } catch (e) {
+      _error = 'Failed to create project dynamically on server, falling back to local storage: $e';
+      final project = Project(
+        id: const Uuid().v4(),
+        name: name,
+        type: type,
+        createdAt: DateTime.now(),
+        modifiedAt: DateTime.now(),
+      );
+      _projects.add(project);
+      _currentProject = project;
+      await saveToLocal();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void openProject(Project project) {
@@ -111,24 +165,38 @@ class ProjectProvider with ChangeNotifier {
   }
 
   Future<void> deleteProject(String projectId) async {
-    _projects.removeWhere((p) => p.id == projectId);
-    if (_currentProject?.id == projectId) {
-      _currentProject = null;
+    try {
+      final response = await ApiService.delete('/api/projects/$projectId');
+      if (response.statusCode == 200) {
+        _projects.removeWhere((p) => p.id == projectId);
+        if (_currentProject?.id == projectId) {
+          _currentProject = null;
+        }
+      }
+      await saveToLocal();
+    } catch (e) {
+      _error = 'Failed to delete project: $e';
+    } finally {
+      notifyListeners();
     }
-    await saveToLocal();
-    notifyListeners();
   }
 
   Future<void> renameProject(String projectId, String newName) async {
     try {
-      final project = _projects.firstWhere((p) => p.id == projectId);
-      project.name = newName;
-      project.modifiedAt = DateTime.now();
+      final response = await ApiService.put('/api/projects/$projectId', body: {
+        'name': newName,
+      });
+      if (response.statusCode == 200) {
+        final project = _projects.firstWhere((p) => p.id == projectId);
+        project.name = newName;
+        project.modifiedAt = DateTime.now();
+      }
       await saveToLocal();
     } catch (e) {
-      _error = 'Project not found';
+      _error = 'Failed to rename project: $e';
+    } finally {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   // Media management

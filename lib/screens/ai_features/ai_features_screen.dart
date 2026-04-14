@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -18,9 +17,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import '../../utils/download_helper.dart';
-import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:gal/gal.dart';
 
 class AIFeaturesScreen extends StatefulWidget {
   const AIFeaturesScreen({super.key});
@@ -115,11 +111,11 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
           }
         }
       } else {
-        // File picker — do NOT use withData:true for video (causes OOM on Android)
+        // File picker with its own error handling
         PlatformFile? picked;
         try {
           final result = await FilePicker.platform
-              .pickFiles(type: FileType.video, withData: false);
+              .pickFiles(type: FileType.video, withData: true);
           if (result == null || result.files.isEmpty) {
             setState(() => _processingIndex = -1);
             return;
@@ -131,42 +127,25 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
           return;
         }
 
-        if (tool.apiEndpoint != null) {
-          // Read bytes from path for API upload
-          Uint8List? fileBytes;
-          if (picked.path != null) {
-            fileBytes = await File(picked.path!).readAsBytes();
-          } else if (picked.bytes != null) {
-            fileBytes = picked.bytes!;
-          }
-          if (fileBytes != null) {
-            try {
-              final data = await _processRealApiTool(tool, fileBytes, picked.name);
-              _showSuccessDialog(picked.name, tool.title, data['output_url'], data['metadata'] ?? {}, originalBytes: fileBytes);
-            } catch (e) {
-              _showSnack('AI processing failed. Please check your connection and try again.', isError: true);
-              debugPrint('API error: $e');
-            }
-          } else {
-            _showSnack('Could not read the selected file.', isError: true);
+        if (tool.apiEndpoint != null && picked.bytes != null) {
+          try {
+            final data = await _processRealApiTool(tool, picked.bytes!, picked.name);
+            _showSuccessDialog(picked.name, tool.title, data['output_url'], data['metadata'] ?? {}, originalBytes: picked.bytes);
+          } catch (e) {
+            _showSnack('AI processing failed. The server may be unavailable, please try again later.', isError: true);
+            debugPrint('API error: $e');
           }
           return;
         }
 
-        // Local AI processing — get duration from file
-        int demoDuration = 120000; // fallback 2 min
-        if (picked.path != null && !kIsWeb) {
-          try {
-            final videoCtrl = VideoPlayerController.file(File(picked.path!));
-            await videoCtrl.initialize();
-            demoDuration = videoCtrl.value.duration.inMilliseconds;
-            videoCtrl.dispose();
-          } catch(_) { /* use fallback */ }
-        }
+        // Use a demo duration for local processing
+        const demoDuration = 120000; // 2 min demo
 
         if (index == 0) {
           _showHighlightResults(demoDuration, picked.name);
-        } else if (index == 2) {
+        } else if (index == 1) {
+          _showCaptionResults(demoDuration, picked.name);
+        } else if (index == 3) {
           _showThumbnailResults(demoDuration, picked.name);
         }
       }
@@ -182,19 +161,14 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
       final request = http.MultipartRequest('POST', Uri.parse('${ApiService.baseUrl}${tool.apiEndpoint}'));
       request.files.add(http.MultipartFile.fromBytes('file', fileBytes, filename: fileName));
       
-      // Short timeout — don't hang user if server is unreachable
-      final response = await request.send().timeout(const Duration(seconds: 15));
+      final response = await request.send().timeout(const Duration(seconds: 120)); // Captions can take longer
       final respStr = await response.stream.bytesToString();
       
       if (response.statusCode == 200) {
         return jsonDecode(respStr) as Map<String, dynamic>;
       } else {
-        throw Exception('Server error (${response.statusCode})');
+        throw Exception('API returned status ${response.statusCode}: $respStr');
       }
-    } on TimeoutException {
-      throw Exception('Server is not reachable. This tool requires a network connection.');
-    } on SocketException {
-      throw Exception('No network connection. This tool requires internet access.');
     } catch (e) {
       throw Exception('Network request failed: $e');
     }
@@ -208,82 +182,82 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => Dialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: Text('$toolTitle Complete!', style: GoogleFonts.outfit(color: AppTheme.accentCyan, fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (fullUrl != null) ...[
-                if (isVideo)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: _VideoPreviewWidget(url: fullUrl),
-                  )
-                else if (originalBytes != null)
-                  BeforeAfterPreview(originalBytes: originalBytes, processedUrl: fullUrl)
-                else
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(fullUrl, fit: BoxFit.contain, height: 250),
-                  ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.85,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$toolTitle Complete!', style: GoogleFonts.outfit(color: AppTheme.accentCyan, fontWeight: FontWeight.bold, fontSize: 20)),
                 const SizedBox(height: 16),
-              ],
-              Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
-              const SizedBox(height: 8),
-              if (fullUrl != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(8)),
-                  child: SelectableText('Download Link (Right-click preview to save, or copy this URL):\n$fullUrl', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 12)),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (fullUrl != null) ...[
+                          if (isVideo)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: _VideoPreviewWidget(url: fullUrl),
+                            )
+                          else if (originalBytes != null)
+                            SizedBox(
+                              height: 300,
+                              child: BeforeAfterPreview(originalBytes: originalBytes, processedUrl: fullUrl),
+                            )
+                          else
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(fullUrl, fit: BoxFit.contain, height: 250),
+                            ),
+                          const SizedBox(height: 16),
+                        ],
+                        Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        if (fullUrl != null)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.white.withAlpha(10), borderRadius: BorderRadius.circular(8)),
+                            child: SelectableText('Download Link (Right-click preview to save, or copy this URL):\n$fullUrl', style: GoogleFonts.inter(color: AppTheme.textSecondary, fontSize: 12)),
+                          ),
+                        const SizedBox(height: 12),
+                        if (md.isNotEmpty)
+                           Text('Metadata: ${md.toString()}', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
+                      ],
+                    ),
+                  ),
                 ),
-              const SizedBox(height: 12),
-              if (md.isNotEmpty)
-                 Text('Metadata: ${md.toString()}', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
-            ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (fullUrl != null)
+                       TextButton.icon(
+                         icon: const Icon(Icons.download_rounded, size: 16, color: AppTheme.primaryPurple),
+                         label: Text('Save', style: GoogleFonts.inter(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)),
+                         onPressed: () {
+                           downloadFile(fullUrl, '${toolTitle.replaceAll(' ', '_')}_output');
+                           _showSnack('Downloading $toolTitle result...');
+                         },
+                       ),
+                    TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary))),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-        actions: [
-          if (fullUrl != null)
-             TextButton.icon(
-               icon: const Icon(Icons.download_rounded, size: 16, color: AppTheme.primaryPurple),
-               label: Text('Save', style: GoogleFonts.inter(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)),
-               onPressed: () async {
-                 if (kIsWeb) {
-                   downloadFile(fullUrl, '${toolTitle.replaceAll(' ', '_')}_output');
-                   _showSnack('Downloading $toolTitle result...');
-                   return;
-                 }
-                 
-                 _showSnack('Saving $toolTitle result to Gallery...');
-                 try {
-                   final response = await http.get(Uri.parse(fullUrl));
-                   final tempDir = await getTemporaryDirectory();
-                   final ext = isVideo ? '.mp4' : '.png';
-                   final file = File('${tempDir.path}/ai_result_${DateTime.now().millisecondsSinceEpoch}$ext');
-                   await file.writeAsBytes(response.bodyBytes);
-                   
-                   if (Platform.isAndroid || Platform.isIOS) {
-                     final hasAccess = await Gal.requestAccess(toAlbum: true);
-                     if (hasAccess) {
-                       if (isVideo) {
-                         await Gal.putVideo(file.path, album: 'SmartEdit');
-                       } else {
-                         await Gal.putImage(file.path, album: 'SmartEdit');
-                       }
-                       if (mounted) _showSnack('Saved to Gallery successfully!');
-                     }
-                   }
-                 } catch (e) {
-                   if (mounted) _showSnack('Failed to save to Gallery: $e', isError: true);
-                 }
-               },
-             ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary))),
-        ],
-      )
+      ),
     );
   }
 
@@ -979,9 +953,9 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                           fontWeight: FontWeight.w500)),
                 )),
             const Spacer(),
-            Icon(tool.apiEndpoint != null ? Icons.cloud_rounded : Icons.bolt_rounded, size: 12, color: tool.color),
+            Icon(Icons.bolt_rounded, size: 12, color: tool.color),
             const SizedBox(width: 4),
-            Text(tool.apiEndpoint != null ? 'Cloud' : 'Offline',
+            Text('Local',
                 style: GoogleFonts.inter(
                     fontSize: 10,
                     color: tool.color,

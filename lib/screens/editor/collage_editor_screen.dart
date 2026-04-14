@@ -8,7 +8,6 @@ import 'package:flutter/rendering.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:gal/gal.dart';
 import '../../theme/app_theme.dart';
 
 class CollageEditorScreen extends StatefulWidget {
@@ -182,18 +181,22 @@ class _CollageEditorScreenState extends State<CollageEditorScreen>
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       final pngBytes = byteData!.buffer.asUint8List();
 
-      final appDir = await getTemporaryDirectory();
+      Directory? appDir;
+      if (!kIsWeb) {
+        if (Platform.isAndroid) {
+          appDir = Directory('/storage/emulated/0/Download');
+          if (!await appDir.exists()) await appDir.create(recursive: true);
+        } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+          appDir = await getDownloadsDirectory();
+        } else {
+          appDir = await getApplicationDocumentsDirectory();
+        }
+      }
+      appDir ??= await getTemporaryDirectory();
       final filePath =
           '${appDir.path}/smartcut_collage_${DateTime.now().millisecondsSinceEpoch}.png';
       final file = File(filePath);
       await file.writeAsBytes(pngBytes);
-
-      if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-        final hasAccess = await Gal.requestAccess(toAlbum: true);
-        if (hasAccess) {
-          await Gal.putImage(filePath, album: 'SmartEdit');
-        }
-      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
