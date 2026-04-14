@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
   UserModel? _user;
@@ -19,12 +20,22 @@ class AuthProvider with ChangeNotifier {
     if (raw.contains('PlatformException') || raw.contains('channel-error')) {
       return 'Unable to connect. Please restart the app and try again.';
     }
+    if (raw.contains('Cannot connect to the server')) {
+      return 'Cannot reach the server. Make sure the backend is running and your device is on the same WiFi network.';
+    }
+    if (raw.contains('not responding after')) {
+      return 'Server is not responding. Please check that the backend is running at ${ApiService.baseUrl}';
+    }
     if (raw.contains('TimeoutException') || raw.contains('timed out')) {
-      return 'Server is starting up, please wait a moment and try again.';
+      return 'Connection timed out. Make sure the backend server is running.';
     }
     if (raw.contains('SocketException') || raw.contains('Connection refused')) {
-      return 'No internet connection. Please check your network.';
+      return 'Cannot reach the server. Check your internet connection and ensure the backend is running.';
     }
+    if (raw.contains('Connection reset') || raw.contains('Connection closed')) {
+      return 'Connection was interrupted. Please try again.';
+    }
+    // Strip "Exception: " prefix from backend errors
     return raw.replaceAll('Exception: ', '');
   }
 
