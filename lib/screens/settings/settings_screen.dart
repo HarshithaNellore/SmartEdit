@@ -61,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+        decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
         child: SafeArea(
           child: Column(
             children: [
@@ -86,9 +86,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 20),
                       _sectionTitle('Privacy'),
                       _toggleItem('Share Analytics', 'Help improve SmartCut', Icons.analytics_rounded, _analytics, (v) { setState(() => _analytics = v); _savePref('analytics', v); }),
-                      const SizedBox(height: 20),
-                      _sectionTitle('Storage'),
-                      _buildStorageInfo(),
                       const SizedBox(height: 20),
                       _sectionTitle('About'),
                       _infoItem('Version', '1.0.0', Icons.info_outline_rounded),
@@ -166,7 +163,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: value,
               onChanged: onChanged,
               activeThumbColor: AppTheme.primaryPurple,
-              inactiveTrackColor: AppTheme.darkElevated,
+              inactiveTrackColor: AppTheme.getElevatedColor(context),
             ),
           ],
         ),
@@ -193,7 +190,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (v) { if (v != null) onChanged(v); },
                 underline: const SizedBox(),
                 isDense: true,
-                dropdownColor: AppTheme.darkCard,
+                dropdownColor: AppTheme.getCardColor(context),
                 icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.primaryPurple, size: 18),
               ),
             ),
@@ -220,86 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildStorageInfo() {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Storage Used', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-              Text('2.4 GB / 10 GB', style: GoogleFonts.inter(fontSize: 13, color: AppTheme.primaryPurple, fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: 0.24,
-              backgroundColor: AppTheme.darkElevated,
-              valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.primaryPurple),
-              minHeight: 8,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _storageChip('Projects', '1.2 GB', AppTheme.primaryPurple),
-              const SizedBox(width: 8),
-              _storageChip('Cache', '800 MB', AppTheme.accentOrange),
-              const SizedBox(width: 8),
-              _storageChip('Exports', '400 MB', AppTheme.accentCyan),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: () => _clearCacheDialog(),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.primaryPink,
-                side: const BorderSide(color: AppTheme.primaryPink),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text('Clear Cache', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  void _clearCacheDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Clear Cache', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-        content: Text('This will clear 800 MB of cached data. Your projects will not be affected.',
-            style: GoogleFonts.inter(color: AppTheme.textSecondary)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppTheme.textMuted)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                content: Text('Cache cleared successfully', style: GoogleFonts.inter(fontSize: 13)),
-                backgroundColor: AppTheme.accentCyan, behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ));
-            },
-            child: Text('Clear', style: GoogleFonts.inter(color: AppTheme.primaryPink, fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _storageChip(String label, String size, Color color) {
     return Expanded(

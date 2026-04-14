@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../theme/app_theme.dart';
+import '../../services/thumbnail_service.dart';
 
 class VideoEditorScreen extends StatefulWidget {
   const VideoEditorScreen({super.key});
@@ -128,6 +129,14 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   // ── Undo/Redo State ──
   final List<List<VideoClip>> _undoStack = [];
   final List<List<VideoClip>> _redoStack = [];
+
+  // ── InShot-style Timeline ──
+  final ScrollController _timelineScrollController = ScrollController();
+  static const double _thumbnailWidth = 44.0;
+  static const double _thumbnailHeight = 56.0;
+  static const double _splitMarkerWidth = 3.0;
+  bool _isTimelineDragging = false;
+  bool _wasPlayingBeforeDrag = false;
   
   void _saveStateToHistory() {
     _undoStack.add(_videoClips.map((c) => VideoClip.copy(c)).toList());
@@ -240,12 +249,85 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     _controller?.dispose();
     _audioController?.dispose();
     _fadeController.dispose();
+    _timelineScrollController.dispose();
     super.dispose();
   }
 
   // ═══════════════════════════════════════════════════════
-  //  VIDEO LIFECYCLE — THE CRITICAL FIX
+  //  THUMBNAIL GENERATION FOR FILMSTRIP TIMELINE
   // ═══════════════════════════════════════════════════════
+
+  Future<void> _generateThumbnailsForClip(int index) async {
+    if (index < 0 || index >= _videoClips.length) return;
+    final clip = _videoClips[index];
+    if (clip.duration.inMilliseconds <= 0) return;
+    if (clip.thumbnails.isNotEmpty) return; // Already generated
+
+    final thumbs = await ThumbnailService.generateThumbnails(
+      videoPath: clip.filePath,
+      durationMs: clip.duration.inMilliseconds,
+      trimStart: clip.trimStartFraction,
+      trimEnd: clip.trimEndFraction,
+      intervalMs: 1000,
+      width: _thumbnailWidth.toInt() * 2,
+      height: _thumbnailHeight.toInt() * 2,
+    );
+
+    if (mounted && index < _videoClips.length) {
+      setState(() {
+        _videoClips[index].thumbnails = thumbs;
+      });
+    }
+  }
+
+  void _generateAllThumbnails() {
+    for (int i = 0; i < _videoClips.length; i++) {
+      _generateThumbnailsForClip(i);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  //  TIMELINE AUTO-SCROLL (sync playhead with playback)
+  // ═══════════════════════════════════════════════════════
+
+  void _scrollTimelineToCurrentPosition() {
+    if (!_timelineScrollController.hasClients) return;
+    if (_isTimelineDragging) return; // Prevent fighting drag inputs
+
+    final totalWidth = _calculateTotalTimelineWidth();
+    final globalDurMs = _globalDuration.inMilliseconds;
+    if (globalDurMs <= 0 || totalWidth <= 0) return;
+
+    final fraction = _globalPosition.inMilliseconds / globalDurMs;
+    // maxScrollExtent equals totalWidth because of padding
+    final targetOffset = fraction * totalWidth;
+    final maxScroll = _timelineScrollController.position.maxScrollExtent;
+    final clampedOffset = targetOffset.clamp(0.0, maxScroll);
+
+    _timelineScrollController.jumpTo(clampedOffset);
+  }
+
+  double _calculateTotalTimelineWidth() {
+    double total = 0;
+    for (int i = 0; i < _videoClips.length; i++) {
+      final clip = _videoClips[i];
+      final numThumbs = clip.thumbnails.isNotEmpty
+          ? clip.thumbnails.length
+          : _estimateThumbnailCount(clip);
+      total += numThumbs * _thumbnailWidth;
+      if (i < _videoClips.length - 1) {
+        total += _splitMarkerWidth;
+      }
+    }
+    return total;
+  }
+
+  int _estimateThumbnailCount(VideoClip clip) {
+    if (clip.duration.inMilliseconds <= 0) return 3;
+    final activeMs = clip.duration.inMilliseconds *
+        (clip.trimEndFraction - clip.trimStartFraction);
+    return (activeMs / 1000).ceil().clamp(1, 60);
+  }
 
   void _onVideoUpdate() {
     if (!mounted || _controller == null) return;
@@ -294,6 +376,11 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         _position = newPos;
         _isPlaying = newPlaying;
       });
+
+      // Pure frame lockstep timeline syncing
+      if (newPlaying && !_isTimelineDragging) {
+        _scrollTimelineToCurrentPosition();
+      }
     }
 
     if (_audioController != null && _audioDuration.inMilliseconds > 0) {
@@ -403,6 +490,9 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         _audioController?.seekTo(_globalPosition);
       }
       _audioController?.play();
+
+      // Generate thumbnails for filmstrip timeline
+      _generateAllThumbnails();
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -569,23 +659,49 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     final totalMs = _duration.inMilliseconds;
     if (totalMs == 0) return;
 
-    final splitFrac = _position.inMilliseconds / totalMs;
-    // Must playhead be strictly within the trim boundaries to split
-    if (splitFrac <= clip.trimStartFraction + 0.01 ||
-        splitFrac >= clip.trimEndFraction - 0.01) {
+    // Use current playback position as exact split point (frame-accurate)
+    final currentPosMs = _position.inMilliseconds;
+    final splitFrac = currentPosMs / totalMs;
+
+    // Must be strictly within the trim boundaries to split
+    final minFrac = clip.trimStartFraction + 0.005;
+    final maxFrac = clip.trimEndFraction - 0.005;
+    if (splitFrac <= minFrac || splitFrac >= maxFrac) {
       _showFeedback('Playhead must be inside the active clip to split');
       return;
     }
 
+    // Create two clips using source segment ranges (no re-encoding)
+    // Clip A: source[trimStart → splitPoint]
+    // Clip B: source[splitPoint → trimEnd]
+    // Both retain ALL original metadata from parent clip
     final clip1 = VideoClip.copy(clip)..trimEndFraction = splitFrac;
     final clip2 = VideoClip.copy(clip)..trimStartFraction = splitFrac;
 
+    // Preserve the exact split frame boundary marker
+    clip1.isSplitEnd = true;
+    clip2.isSplitStart = true;
+
     _saveStateToHistory();
+
+    // Pause playback before modifying clip list to prevent jumps
+    _controller?.pause();
+    _audioController?.pause();
+
     setState(() {
       _videoClips[_selectedClipIndex!] = clip1;
       _videoClips.insert(_selectedClipIndex! + 1, clip2);
+      // Stay on clip1 — the controller is already at the split position
+      // so no visual jump occurs
+      _trimStart = clip1.trimStartFraction;
+      _trimEnd = clip1.trimEndFraction;
     });
-    _showFeedback('Clip split into two parts');
+
+    // Seek precisely to the end of clip1 to show the split frame
+    final endMs = (clip1.trimEndFraction * totalMs).round();
+    _controller?.seekTo(Duration(milliseconds: endMs));
+
+    _showFeedback('Clip split at ${_formatDuration(_position)}');
   }
 
   void _reorderClip(int oldIndex, int newIndex) {
@@ -609,7 +725,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Add Text Overlay',
             style: GoogleFonts.outfit(
@@ -622,7 +738,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
             hintText: 'Enter text...',
             hintStyle: GoogleFonts.inter(color: AppTheme.textMuted),
             filled: true,
-            fillColor: AppTheme.darkElevated,
+            fillColor: AppTheme.getElevatedColor(context),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -669,7 +785,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+        decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
         child: SafeArea(
           child: FadeTransition(
             opacity: _fadeAnimation,
@@ -1059,7 +1175,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
           min: 0,
           max: 1,
           activeColor: AppTheme.primaryPurple,
-          inactiveColor: AppTheme.darkElevated,
+          inactiveColor: AppTheme.getElevatedColor(context),
           onChanged: (values) {
             setState(() {
               _audioTrimStart = values.start;
@@ -1097,7 +1213,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
           min: 0,
           max: 1,
           activeColor: AppTheme.primaryPurple,
-          inactiveColor: AppTheme.darkElevated,
+          inactiveColor: AppTheme.getElevatedColor(context),
           onChanged: (values) {
             setState(() {
               _trimStart = values.start;
@@ -1157,7 +1273,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkElevated,
+                  color: AppTheme.getElevatedColor(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white.withAlpha(20)),
                 ),
@@ -1203,7 +1319,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                 decoration: BoxDecoration(
                   color: isSelected
                       ? AppTheme.primaryPurple.withAlpha(30)
-                      : AppTheme.darkElevated,
+                      : AppTheme.getElevatedColor(context),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: isSelected ? AppTheme.primaryPurple : Colors.white.withAlpha(15),
@@ -1248,7 +1364,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
           max: 3.0,
           divisions: 11,
           activeColor: AppTheme.primaryPurple,
-          inactiveColor: AppTheme.darkElevated,
+          inactiveColor: AppTheme.getElevatedColor(context),
           onChanged: (v) {
             setState(() => clip.speed = v);
             _controller?.setPlaybackSpeed(v);
@@ -1277,7 +1393,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         min: 0.0,
         max: 1.0,
         activeColor: AppTheme.primaryPurple,
-        inactiveColor: AppTheme.darkElevated,
+        inactiveColor: AppTheme.getElevatedColor(context),
         onChanged: (v) {
           setState(() => clip.volume = v);
           _controller?.setVolume(v);
@@ -1309,7 +1425,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: Theme.of(context).colorScheme.surface,
         border: Border(top: BorderSide(color: Colors.white.withAlpha(10))),
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1387,17 +1503,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
     );
   }
 
-  // ── Timeline ──
+  // ── InShot-Style Filmstrip Timeline ──
   Widget _buildTimeline() {
     return Container(
-      height: _backgroundAudioPath != null ? 145 : 120,
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      height: _backgroundAudioPath != null ? 140 : 110,
+      padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Colors.white.withAlpha(8)),
         ),
       ),
       child: Column(children: [
+        // Timeline header row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(children: [
@@ -1406,139 +1523,227 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
             Text('Timeline',
                 style: GoogleFonts.inter(
                     fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+            if (_globalDuration.inMilliseconds > 0) ...[
+              const SizedBox(width: 8),
+              Text(_formatDuration(_globalPosition),
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.accentCyan)),
+              Text(' / ${_formatDuration(_globalDuration)}',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10, color: AppTheme.textMuted)),
+            ],
             const Spacer(),
             _miniButton(Icons.add, 'Add', _pickAndAddVideo),
             const SizedBox(width: 8),
             _miniButton(Icons.content_cut, 'Split', _splitClipAtPosition),
           ]),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
+        // Filmstrip area with centered playhead
         Expanded(
-          flex: 2,
           child: _videoClips.isEmpty
               ? Center(
                   child: Text('Tap + to add video clips',
                       style: GoogleFonts.inter(fontSize: 11, color: AppTheme.textMuted)),
                 )
-              : ReorderableListView(
-                  scrollDirection: Axis.horizontal,
-                  onReorder: _reorderClip,
-                  proxyDecorator: (child, index, animation) {
-                    return Material(
-                      elevation: 8,
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                      child: child,
-                    );
-                  },
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    for (int i = 0; i < _videoClips.length; i++)
-                      _buildTimelineClip(i),
-                  ],
-                ),
+              : _buildFilmstrip(),
         ),
         if (_backgroundAudioPath != null) _buildAudioTrack(),
       ]),
     );
   }
 
-  Widget _buildTimelineClip(int index) {
-    final clip = _videoClips[index];
-    final isSelected = _selectedClipIndex == index;
+  Widget _buildFilmstrip() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final halfScreen = screenWidth / 2;
 
-    // Show playback position indicator for the selected clip
-    double? playbackFrac;
-    if (isSelected && _duration.inMilliseconds > 0) {
-      playbackFrac = _position.inMilliseconds / _duration.inMilliseconds;
-    }
-
-    return GestureDetector(
-      key: ValueKey('clip_$index'),
-      onTap: () {
-        setState(() => _selectedClipIndex = index);
-        _loadVideoForClip(index);
-      },
-      onLongPress: () => _showClipOptions(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 110,
-        margin: const EdgeInsets.only(right: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: isSelected ? AppTheme.primaryPurple.withAlpha(40) : AppTheme.darkElevated,
-          border: Border.all(
-            color: isSelected ? AppTheme.primaryPurple : Colors.transparent,
-            width: isSelected ? 2 : 0,
+    return Stack(
+      children: [
+        // Scrollable filmstrip
+        NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (notification is ScrollStartNotification && notification.dragDetails != null) {
+              _isTimelineDragging = true;
+              _wasPlayingBeforeDrag = _isPlaying;
+              _controller?.pause();
+              _audioController?.pause();
+            } else if (notification is ScrollUpdateNotification) {
+              if (_isTimelineDragging) {
+                _seekToScrollPosition();
+              }
+            } else if (notification is ScrollEndNotification) {
+              if (_isTimelineDragging) {
+                _isTimelineDragging = false;
+                if (_wasPlayingBeforeDrag) {
+                  _controller?.play();
+                  _audioController?.play();
+                  _wasPlayingBeforeDrag = false;
+                }
+              }
+            }
+            return false;
+          },
+          child: SingleChildScrollView(
+            controller: _timelineScrollController,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                // Left padding (half screen) so first frame can be at playhead
+                SizedBox(width: halfScreen),
+                // Build continuous filmstrip
+                ..._buildFilmstripContent(),
+                // Right padding (half screen) so last frame can be at playhead
+                SizedBox(width: halfScreen),
+              ],
+            ),
           ),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Stack(fit: StackFit.expand, children: [
-            // Filmstrip background grid simulation
-            Row(
-              children: List.generate(4, (i) => Expanded(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
-              )),
+        // Fixed centered playhead line (InShot-style white line)
+        Positioned(
+          left: halfScreen - 1.5,
+          top: 0,
+          bottom: 0,
+          child: IgnorePointer(
+            child: Container(
+              width: 3,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(1.5),
+                boxShadow: [
+                  BoxShadow(color: Colors.white.withAlpha(120), blurRadius: 6, spreadRadius: 1),
+                  BoxShadow(color: AppTheme.primaryPurple.withAlpha(80), blurRadius: 12, spreadRadius: 2),
+                ],
+              ),
             ),
-
-            // Clip content
-            Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.videocam_rounded,
-                  color: isSelected ? AppTheme.primaryPink : AppTheme.textMuted,
-                  size: 24),
-              const SizedBox(height: 4),
-              Text(clip.duration.inSeconds > 0 ? '${clip.duration.inSeconds}s' : 'Clip ${index + 1}',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    color: isSelected ? Colors.white : Colors.white70,
-                    fontWeight: FontWeight.w700,
-                  )),
-              if (clip.speed != 1.0)
-                Text('${clip.speed.toStringAsFixed(1)}x',
-                    style: GoogleFonts.inter(
-                        fontSize: 8, color: AppTheme.accentCyan)),
-            ]),
-
-            // Trim indicators
-            if (clip.trimStartFraction > 0.01 || clip.trimEndFraction < 0.99)
-              Positioned(
-                bottom: 4,
-                right: 4,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accentOrange.withAlpha(200),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Icon(Icons.content_cut, size: 10, color: Colors.white),
-                ),
-              ),
-
-            // Playback position indicator
-            if (playbackFrac != null)
-              Positioned(
-                left: playbackFrac * 106,
-                top: 0,
-                bottom: 0,
-                child: Container(
-                  width: 3,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(color: Colors.white.withAlpha(100), blurRadius: 4),
-                    ],
-                  ),
-                ),
-              ),
-          ]),
+          ),
         ),
+        // Playhead top marker (small triangle/diamond)
+        Positioned(
+          left: halfScreen - 5,
+          top: 0,
+          child: IgnorePointer(
+            child: CustomPaint(
+              size: const Size(10, 8),
+              painter: _PlayheadMarkerPainter(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _seekToScrollPosition() {
+    if (!_timelineScrollController.hasClients) return;
+    final scrollOffset = _timelineScrollController.offset;
+    final totalWidth = _calculateTotalTimelineWidth();
+    if (totalWidth <= 0) return;
+
+    // The playhead is at center of screen. Content starts after halfScreen padding.
+    final fraction = (scrollOffset / totalWidth).clamp(0.0, 1.0);
+    final targetMs = (fraction * _globalDuration.inMilliseconds).round();
+    _seekGlobal(Duration(milliseconds: targetMs));
+  }
+
+  List<Widget> _buildFilmstripContent() {
+    final List<Widget> widgets = [];
+
+    for (int i = 0; i < _videoClips.length; i++) {
+      // Add split marker before clip (if this clip is a split continuation)
+      if (i > 0) {
+        widgets.add(_buildSplitMarker(i));
+      }
+
+      // Add clip filmstrip thumbnails
+      widgets.add(_buildClipFilmstrip(i));
+    }
+
+    return widgets;
+  }
+
+  Widget _buildSplitMarker(int clipIndex) {
+    final prevClip = _videoClips[clipIndex - 1];
+    final currentClip = _videoClips[clipIndex];
+    final isSplitBoundary = prevClip.isSplitEnd || currentClip.isSplitStart;
+
+    return Container(
+      width: _splitMarkerWidth,
+      height: _thumbnailHeight,
+      decoration: BoxDecoration(
+        color: isSplitBoundary
+            ? AppTheme.accentOrange.withAlpha(200)
+            : Colors.white.withAlpha(60),
+        borderRadius: BorderRadius.circular(1),
+        boxShadow: isSplitBoundary
+            ? [BoxShadow(color: AppTheme.accentOrange.withAlpha(80), blurRadius: 4)]
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildClipFilmstrip(int index) {
+    final clip = _videoClips[index];
+    final isSelected = _selectedClipIndex == index;
+    final numThumbs = clip.thumbnails.isNotEmpty
+        ? clip.thumbnails.length
+        : _estimateThumbnailCount(clip);
+    final totalClipWidth = numThumbs * _thumbnailWidth;
+
+    return GestureDetector(
+      onTap: () {
+        if (_selectedClipIndex != index) {
+          setState(() => _selectedClipIndex = index);
+          _loadVideoForClip(index);
+        }
+      },
+      onLongPress: () => _showClipOptions(index),
+      child: Container(
+        height: _thumbnailHeight,
+        width: totalClipWidth,
+        decoration: BoxDecoration(
+          border: isSelected
+              ? Border.all(color: AppTheme.primaryPurple, width: 2)
+              : null,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(isSelected ? 2 : 4),
+          child: Row(
+            children: List.generate(numThumbs, (thumbIdx) {
+              return _buildSingleThumbnail(clip, thumbIdx, numThumbs);
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSingleThumbnail(VideoClip clip, int thumbIdx, int total) {
+    final hasThumb = clip.thumbnails.isNotEmpty && thumbIdx < clip.thumbnails.length;
+    final thumbPath = hasThumb ? clip.thumbnails[thumbIdx] : null;
+
+    return SizedBox(
+      width: _thumbnailWidth,
+      height: _thumbnailHeight,
+      child: thumbPath != null
+          ? Image.file(
+              File(thumbPath),
+              width: _thumbnailWidth,
+              height: _thumbnailHeight,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) => _thumbnailPlaceholder(),
+              // Use cacheWidth for memory efficiency
+              cacheWidth: (_thumbnailWidth * 2).toInt(),
+            )
+          : _thumbnailPlaceholder(),
+    );
+  }
+
+  Widget _thumbnailPlaceholder() {
+    return Container(
+      width: _thumbnailWidth,
+      height: _thumbnailHeight,
+      color: const Color(0xFF1A1A2E),
+      child: Center(
+        child: Icon(Icons.videocam, size: 14, color: Colors.white.withAlpha(30)),
       ),
     );
   }
@@ -1549,7 +1754,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
       height: 80,
       padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withAlpha(240),
+        color: Theme.of(context).colorScheme.surface.withAlpha(240),
         border: Border(top: BorderSide(color: Colors.white.withAlpha(8))),
       ),
       child: ListView(
@@ -1601,7 +1806,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
   void _showClipOptions(int index) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.darkSurface,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -1724,14 +1929,14 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
                 width: isActive ? 1.5 : 1,
               ),
             ),
-            child: Icon(icon, color: isActive ? c : AppTheme.textSecondary, size: 20),
+            child: Icon(icon, color: isActive ? c : Colors.white, size: 20),
           ),
           const SizedBox(height: 4),
           Text(label,
               style: GoogleFonts.inter(
                 fontSize: 9,
-                color: isActive ? c : AppTheme.textMuted,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                color: isActive ? c : Colors.white,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               ),
               textAlign: TextAlign.center),
         ]),
@@ -1805,7 +2010,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen>
         min: min,
         max: max,
         activeColor: AppTheme.primaryPurple,
-        inactiveColor: AppTheme.darkElevated,
+        inactiveColor: AppTheme.getElevatedColor(context),
         onChanged: onChanged,
       ),
     ]);
@@ -1849,6 +2054,9 @@ class VideoClip {
   double trimStartFraction;
   double trimEndFraction;
   Duration duration;
+  bool isSplitStart;
+  bool isSplitEnd;
+  List<String?> thumbnails;
 
   VideoClip({
     required this.fileName,
@@ -1861,7 +2069,10 @@ class VideoClip {
     this.trimStartFraction = 0.0,
     this.trimEndFraction = 1.0,
     this.duration = Duration.zero,
-  });
+    this.isSplitStart = false,
+    this.isSplitEnd = false,
+    List<String?>? thumbnails,
+  }) : thumbnails = thumbnails ?? [];
 
   factory VideoClip.copy(VideoClip other) {
     return VideoClip(
@@ -1875,6 +2086,9 @@ class VideoClip {
       trimStartFraction: other.trimStartFraction,
       trimEndFraction: other.trimEndFraction,
       duration: other.duration,
+      isSplitStart: other.isSplitStart,
+      isSplitEnd: other.isSplitEnd,
+      thumbnails: List<String?>.from(other.thumbnails),
     );
   }
 }
@@ -1891,4 +2105,23 @@ class VideoTextOverlay {
     this.fontSize = 24,
     this.color = Colors.white,
   });
+}
+
+/// Custom painter for the playhead triangle marker (InShot-style).
+class _PlayheadMarkerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width / 2, size.height)
+      ..lineTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

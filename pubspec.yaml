@@ -35,6 +35,7 @@ dependencies:
   crop_image: ^1.0.17
   firebase_core: ^4.6.0
   cloud_firestore: ^6.2.0
+  gal: ^2.3.2
 
 
 dev_dependencies:

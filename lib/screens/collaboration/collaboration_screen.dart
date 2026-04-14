@@ -49,7 +49,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     if (widget.projectId.isEmpty) {
       return Scaffold(
         body: Container(
-          decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+          decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
           child: SafeArea(
             child: Column(
               children: [
@@ -81,7 +81,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+        decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
         child: SafeArea(
           child: Column(
             children: [
@@ -352,7 +352,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     return await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Remove Member', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         content: Text('Remove $name from the team?', style: GoogleFonts.inter(color: AppTheme.textSecondary)),
@@ -385,7 +385,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
                   decoration: BoxDecoration(
                     color: isOnline ? const Color(0xFF00E676) : Colors.grey,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.darkSurface, width: 2),
+                    border: Border.all(color: Theme.of(context).colorScheme.surface, width: 2),
                   ),
                 ),
               ),
@@ -472,7 +472,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
                                 ])),
                                 PopupMenuButton<String>(
                                   icon: Icon(Icons.more_horiz, color: AppTheme.textMuted, size: 18),
-                                  color: AppTheme.darkCard,
+                                  color: AppTheme.getCardColor(context),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   onSelected: (v) {
                                     if (v == 'delete') provider.deleteComment(c['id']);
@@ -512,7 +512,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
+              color: Theme.of(context).colorScheme.surface,
               border: Border(top: BorderSide(color: Colors.white.withAlpha(10))),
             ),
             child: Row(children: [
@@ -679,7 +679,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Clear All Comments', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         content: Text('Delete all ${provider.comments.length} comments? This cannot be undone.',
@@ -702,7 +702,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     final notesController = TextEditingController();
 
     showModalBottomSheet(
-      context: context, backgroundColor: AppTheme.darkSurface, isScrollControlled: true,
+      context: context, backgroundColor: Theme.of(context).colorScheme.surface, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
@@ -741,7 +741,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Restore Version', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         content: Text('Restore "${v['name']}"? Your current work will be saved as a new version first.',
@@ -768,7 +768,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
     String selectedRole = 'editor';
 
     showModalBottomSheet(
-      context: context, backgroundColor: AppTheme.darkSurface, isScrollControlled: true,
+      context: context, backgroundColor: Theme.of(context).colorScheme.surface, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (ctx) => StatefulBuilder(builder: (ctx, setBS) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 24),
@@ -875,7 +875,7 @@ class _CollaborationScreenState extends State<CollaborationScreen> with SingleTi
   void _showFeedback(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg, style: GoogleFonts.inter(fontSize: 13)),
-      backgroundColor: AppTheme.darkCard, behavior: SnackBarBehavior.floating,
+      backgroundColor: AppTheme.getCardColor(context), behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       duration: const Duration(seconds: 2),
     ));

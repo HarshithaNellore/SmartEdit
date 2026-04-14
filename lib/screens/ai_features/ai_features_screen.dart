@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -12,10 +13,14 @@ import '../../services/ai_caption_service.dart';
 import '../../services/ai_filter_service.dart';
 import '../../services/ai_thumbnail_service.dart';
 import '../../services/api_service.dart';
+import '../../widgets/before_after_preview.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import '../../utils/download_helper.dart';
+import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:gal/gal.dart';
 
 class AIFeaturesScreen extends StatefulWidget {
   const AIFeaturesScreen({super.key});
@@ -103,18 +108,18 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
         } else if (tool.apiEndpoint != null) {
           try {
             final data = await _processRealApiTool(tool, bytes, xfile.name);
-            _showSuccessDialog(xfile.name, tool.title, data['output_url'], data['metadata'] ?? {});
+            _showSuccessDialog(xfile.name, tool.title, data['output_url'], data['metadata'] ?? {}, originalBytes: bytes);
           } catch (e) {
             _showSnack('AI processing failed. The server may be unavailable, please try again later.', isError: true);
             debugPrint('API error: $e');
           }
         }
       } else {
-        // File picker with its own error handling
+        // File picker — do NOT use withData:true for video (causes OOM on Android)
         PlatformFile? picked;
         try {
           final result = await FilePicker.platform
-              .pickFiles(type: FileType.video, withData: true);
+              .pickFiles(type: FileType.video, withData: false);
           if (result == null || result.files.isEmpty) {
             setState(() => _processingIndex = -1);
             return;
@@ -126,25 +131,42 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
           return;
         }
 
-        if (tool.apiEndpoint != null && picked.bytes != null) {
-          try {
-            final data = await _processRealApiTool(tool, picked.bytes!, picked.name);
-            _showSuccessDialog(picked.name, tool.title, data['output_url'], data['metadata'] ?? {});
-          } catch (e) {
-            _showSnack('AI processing failed. The server may be unavailable, please try again later.', isError: true);
-            debugPrint('API error: $e');
+        if (tool.apiEndpoint != null) {
+          // Read bytes from path for API upload
+          Uint8List? fileBytes;
+          if (picked.path != null) {
+            fileBytes = await File(picked.path!).readAsBytes();
+          } else if (picked.bytes != null) {
+            fileBytes = picked.bytes!;
+          }
+          if (fileBytes != null) {
+            try {
+              final data = await _processRealApiTool(tool, fileBytes, picked.name);
+              _showSuccessDialog(picked.name, tool.title, data['output_url'], data['metadata'] ?? {}, originalBytes: fileBytes);
+            } catch (e) {
+              _showSnack('AI processing failed. Please check your connection and try again.', isError: true);
+              debugPrint('API error: $e');
+            }
+          } else {
+            _showSnack('Could not read the selected file.', isError: true);
           }
           return;
         }
 
-        // Use a demo duration for local processing
-        const demoDuration = 120000; // 2 min demo
+        // Local AI processing — get duration from file
+        int demoDuration = 120000; // fallback 2 min
+        if (picked.path != null && !kIsWeb) {
+          try {
+            final videoCtrl = VideoPlayerController.file(File(picked.path!));
+            await videoCtrl.initialize();
+            demoDuration = videoCtrl.value.duration.inMilliseconds;
+            videoCtrl.dispose();
+          } catch(_) { /* use fallback */ }
+        }
 
         if (index == 0) {
           _showHighlightResults(demoDuration, picked.name);
-        } else if (index == 1) {
-          _showCaptionResults(demoDuration, picked.name);
-        } else if (index == 3) {
+        } else if (index == 2) {
           _showThumbnailResults(demoDuration, picked.name);
         }
       }
@@ -160,20 +182,25 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
       final request = http.MultipartRequest('POST', Uri.parse('${ApiService.baseUrl}${tool.apiEndpoint}'));
       request.files.add(http.MultipartFile.fromBytes('file', fileBytes, filename: fileName));
       
-      final response = await request.send().timeout(const Duration(seconds: 120)); // Captions can take longer
+      // Short timeout — don't hang user if server is unreachable
+      final response = await request.send().timeout(const Duration(seconds: 15));
       final respStr = await response.stream.bytesToString();
       
       if (response.statusCode == 200) {
         return jsonDecode(respStr) as Map<String, dynamic>;
       } else {
-        throw Exception('API returned status ${response.statusCode}: $respStr');
+        throw Exception('Server error (${response.statusCode})');
       }
+    } on TimeoutException {
+      throw Exception('Server is not reachable. This tool requires a network connection.');
+    } on SocketException {
+      throw Exception('No network connection. This tool requires internet access.');
     } catch (e) {
       throw Exception('Network request failed: $e');
     }
   }
 
-  void _showSuccessDialog(String fileName, String toolTitle, String? outputUrl, Map<String, dynamic> md) {
+  void _showSuccessDialog(String fileName, String toolTitle, String? outputUrl, Map<String, dynamic> md, {Uint8List? originalBytes}) {
     if (!mounted) return;
     
     final fullUrl = outputUrl != null ? '${ApiService.baseUrl}$outputUrl' : null;
@@ -182,7 +209,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text('$toolTitle Complete!', style: GoogleFonts.outfit(color: AppTheme.accentCyan, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
           child: Column(
@@ -190,12 +217,18 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (fullUrl != null) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: isVideo 
-                    ? _VideoPreviewWidget(url: fullUrl) 
-                    : Image.network(fullUrl, fit: BoxFit.contain, height: 250),
-                ),
+                if (isVideo)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _VideoPreviewWidget(url: fullUrl),
+                  )
+                else if (originalBytes != null)
+                  BeforeAfterPreview(originalBytes: originalBytes, processedUrl: fullUrl)
+                else
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(fullUrl, fit: BoxFit.contain, height: 250),
+                  ),
                 const SizedBox(height: 16),
               ],
               Text('Processed: $fileName', style: GoogleFonts.inter(color: AppTheme.textPrimary, fontSize: 13)),
@@ -217,9 +250,35 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
              TextButton.icon(
                icon: const Icon(Icons.download_rounded, size: 16, color: AppTheme.primaryPurple),
                label: Text('Save', style: GoogleFonts.inter(color: AppTheme.primaryPurple, fontWeight: FontWeight.bold)),
-               onPressed: () {
-                 downloadFile(fullUrl, '${toolTitle.replaceAll(' ', '_')}_output');
-                 _showSnack('Downloading $toolTitle result...');
+               onPressed: () async {
+                 if (kIsWeb) {
+                   downloadFile(fullUrl, '${toolTitle.replaceAll(' ', '_')}_output');
+                   _showSnack('Downloading $toolTitle result...');
+                   return;
+                 }
+                 
+                 _showSnack('Saving $toolTitle result to Gallery...');
+                 try {
+                   final response = await http.get(Uri.parse(fullUrl));
+                   final tempDir = await getTemporaryDirectory();
+                   final ext = isVideo ? '.mp4' : '.png';
+                   final file = File('${tempDir.path}/ai_result_${DateTime.now().millisecondsSinceEpoch}$ext');
+                   await file.writeAsBytes(response.bodyBytes);
+                   
+                   if (Platform.isAndroid || Platform.isIOS) {
+                     final hasAccess = await Gal.requestAccess(toAlbum: true);
+                     if (hasAccess) {
+                       if (isVideo) {
+                         await Gal.putVideo(file.path, album: 'SmartEdit');
+                       } else {
+                         await Gal.putImage(file.path, album: 'SmartEdit');
+                       }
+                       if (mounted) _showSnack('Saved to Gallery successfully!');
+                     }
+                   }
+                 } catch (e) {
+                   if (mounted) _showSnack('Failed to save to Gallery: $e', isError: true);
+                 }
                },
              ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Close', style: GoogleFonts.inter(color: AppTheme.textSecondary))),
@@ -264,7 +323,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkElevated,
+        color: AppTheme.getElevatedColor(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: scoreColor.withAlpha(40)),
       ),
@@ -338,7 +397,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkElevated,
+                  color: AppTheme.getElevatedColor(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(children: [
@@ -415,7 +474,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkElevated,
+                  color: AppTheme.getElevatedColor(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(children: [
@@ -591,7 +650,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.darkElevated,
+                color: AppTheme.getElevatedColor(context),
                 borderRadius: BorderRadius.circular(12),
                 border: isTop
                     ? Border.all(
@@ -699,7 +758,7 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+        decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
         child: SafeArea(
           child: Column(children: [
             _buildTopBar(),
@@ -920,9 +979,9 @@ class _AIFeaturesScreenState extends State<AIFeaturesScreen>
                           fontWeight: FontWeight.w500)),
                 )),
             const Spacer(),
-            Icon(Icons.bolt_rounded, size: 12, color: tool.color),
+            Icon(tool.apiEndpoint != null ? Icons.cloud_rounded : Icons.bolt_rounded, size: 12, color: tool.color),
             const SizedBox(width: 4),
-            Text('Local',
+            Text(tool.apiEndpoint != null ? 'Cloud' : 'Offline',
                 style: GoogleFonts.inter(
                     fontSize: 10,
                     color: tool.color,
@@ -977,9 +1036,9 @@ class _ResultSheet extends StatelessWidget {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(children: [
         // Handle
@@ -989,7 +1048,7 @@ class _ResultSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-                color: AppTheme.darkElevated,
+                color: AppTheme.getElevatedColor(context),
                 borderRadius: BorderRadius.circular(2)),
           ),
         ),
@@ -1033,7 +1092,7 @@ class _ResultSheet extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(color: AppTheme.darkElevated, height: 1),
+        Divider(color: AppTheme.getElevatedColor(context), height: 1),
         // Content
         Expanded(
           child: SingleChildScrollView(

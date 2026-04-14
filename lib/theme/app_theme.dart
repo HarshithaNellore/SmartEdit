@@ -260,6 +260,136 @@ class AppTheme {
     );
   }
 
+  static ThemeData get amoledTheme {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: Colors.black,
+      colorScheme: const ColorScheme.dark(
+        primary: primaryPurple,
+        secondary: primaryPink,
+        tertiary: accentCyan,
+        surface: Colors.black,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: Colors.white,
+      ),
+      textTheme: darkTheme.textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+      appBarTheme: const AppBarTheme(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
+      ),
+      cardTheme: CardThemeData(
+        color: const Color(0xFF080808),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFF222222), width: 1),
+        ),
+      ),
+      elevatedButtonTheme: darkTheme.elevatedButtonTheme,
+      dialogTheme: DialogThemeData(
+        backgroundColor: const Color(0xFF111111),
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF333333), width: 1.5),
+        ),
+      ),
+      outlinedButtonTheme: darkTheme.outlinedButtonTheme,
+      iconTheme: const IconThemeData(color: Colors.white70),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.black,
+        selectedItemColor: primaryPurple,
+        unselectedItemColor: Colors.white38,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+      ),
+      sliderTheme: darkTheme.sliderTheme,
+    );
+  }
+
+  static ThemeData get midnightTheme {
+    const midnightBg = Color(0xFF070B19);
+    const midnightSurface = Color(0xFF0D1126);
+    const midnightCard = Color(0xFF11182A);
+    const midnightElevated = Color(0xFF1A233A);
+    
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: midnightBg,
+      colorScheme: const ColorScheme.dark(
+        primary: primaryPurple,
+        secondary: primaryPink,
+        tertiary: accentCyan,
+        surface: midnightSurface,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: textPrimary,
+      ),
+      textTheme: darkTheme.textTheme,
+      appBarTheme: darkTheme.appBarTheme,
+      cardTheme: CardThemeData(
+        color: midnightCard,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+      elevatedButtonTheme: darkTheme.elevatedButtonTheme,
+      dialogTheme: DialogThemeData(
+        backgroundColor: midnightSurface,
+        elevation: 24,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withAlpha(20), width: 1.5),
+        ),
+      ),
+      outlinedButtonTheme: darkTheme.outlinedButtonTheme,
+      iconTheme: darkTheme.iconTheme,
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: midnightSurface,
+        selectedItemColor: primaryPurple,
+        unselectedItemColor: textMuted,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+      ),
+      sliderTheme: darkTheme.sliderTheme,
+    );
+  }
+
+  static LinearGradient? getBackgroundGradient(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.brightness == Brightness.light) return null;
+    if (theme.scaffoldBackgroundColor == Colors.black) return null; // AMOLED
+    if (theme.scaffoldBackgroundColor == const Color(0xFF070B19)) {
+      return const LinearGradient(
+        colors: [Color(0xFF070B19), Color(0xFF0D1126)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      );
+    }
+    return darkGradient;
+  }
+
+  static Color getCardColor(BuildContext context) {
+    if (Theme.of(context).brightness == Brightness.light) return Colors.grey[100]!;
+    if (Theme.of(context).scaffoldBackgroundColor == Colors.black) return const Color(0xFF080808);
+    if (Theme.of(context).scaffoldBackgroundColor == const Color(0xFF070B19)) return const Color(0xFF11182A);
+    return darkCard;
+  }
+
+  static Color getElevatedColor(BuildContext context) {
+    if (Theme.of(context).brightness == Brightness.light) return Colors.grey[200]!;
+    if (Theme.of(context).scaffoldBackgroundColor == Colors.black) return const Color(0xFF111111);
+    if (Theme.of(context).scaffoldBackgroundColor == const Color(0xFF070B19)) return const Color(0xFF1A233A);
+    return darkElevated;
+  }
+
   // Helper to create gradient decoration
   static BoxDecoration gradientBox({
     LinearGradient? gradient,

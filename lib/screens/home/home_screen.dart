@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppTheme.darkGradient),
+        decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, gradient: AppTheme.getBackgroundGradient(context)),
         child: SafeArea(
           child: IndexedStack(
             index: _currentNavIndex,
@@ -363,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 300),
         width: 150,
         decoration: BoxDecoration(
-          color: AppTheme.darkElevated,
+          color: AppTheme.getElevatedColor(context),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withAlpha(10), width: 1.5),
         ),
@@ -391,8 +391,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      AppTheme.darkSurface.withAlpha(200),
-                      AppTheme.darkSurface.withAlpha(170),
+                      Theme.of(context).colorScheme.surface.withAlpha(200),
+                      Theme.of(context).colorScheme.surface.withAlpha(170),
                     ],
                   ),
                 ),
@@ -593,9 +593,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           _statItem('$projectCount', 'Projects'),
-                          Container(width: 1, height: 40, color: AppTheme.darkElevated),
+                          Container(width: 1, height: 40, color: AppTheme.getElevatedColor(context)),
                           _statItem('$exportCount', 'Exports'),
-                          Container(width: 1, height: 40, color: AppTheme.darkElevated),
+                          Container(width: 1, height: 40, color: AppTheme.getElevatedColor(context)),
                           _statItem('$shareCount', 'Shared'),
                         ],
                       ),
@@ -681,7 +681,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete Project', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
         content: Text('Are you sure you want to delete "${project.name}"? This cannot be undone.',
@@ -697,7 +697,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text('"${project.name}" deleted', style: GoogleFonts.inter(fontSize: 13)),
-                backgroundColor: AppTheme.darkCard, behavior: SnackBarBehavior.floating,
+                backgroundColor: AppTheme.getCardColor(context), behavior: SnackBarBehavior.floating,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ));
             },
@@ -735,14 +735,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       isScrollControlled: true,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: AppTheme.darkSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.darkElevated, borderRadius: BorderRadius.circular(2))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppTheme.getElevatedColor(context), borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 24),
             Text('Create New Project', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             const SizedBox(height: 24),
@@ -842,13 +842,13 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
+        color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(color: Colors.black.withAlpha(50), blurRadius: 10, offset: const Offset(0, -2)),
         ],
       ),
       child: BottomAppBar(
-        color: AppTheme.darkSurface,
+        color: Theme.of(context).colorScheme.surface,
         notchMargin: 8,
         shape: const CircularNotchedRectangle(),
         child: Padding(

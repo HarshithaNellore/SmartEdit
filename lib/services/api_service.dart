@@ -8,7 +8,7 @@ class ApiService {
   // Route connections directly to local backend to resolve timeout issues
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:5000';
-    if (Platform.isAndroid) return 'http://192.168.2.130:5000';
+    if (Platform.isAndroid) return 'http://192.168.2.19:5000';
     return 'http://localhost:5000';
   }
 
@@ -77,8 +77,8 @@ class ApiService {
     return headers;
   }
 
-  // Longer timeout (60s) to account for Render free-tier cold starts
-  static const _timeout = Duration(seconds: 60);
+  // Longer timeout (300s) to account for Render free-tier cold starts
+  static const _timeout = Duration(seconds: 300);
 
   static Future<http.Response> get(String path, {bool auth = true}) async {
     final headers = await _headers(auth: auth);

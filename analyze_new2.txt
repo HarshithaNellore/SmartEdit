@@ -1,0 +1,21 @@
+﻿Analyzing 4 items...                                            
+
+   info - Unnecessary use of multiple underscores - lib\screens\editor\video_editor_screen.dart:1741:33 - unnecessary_underscores
+   info - Unnecessary use of multiple underscores - lib\screens\editor\video_editor_screen.dart:1741:37 - unnecessary_underscores
+
+flutter : 2 issues found. 
+(ran in 1.6s)
+At line:1 char:1
++ flutter analyze lib/screens/
+editor/video_editor_screen.dar
+t lib/servi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          : 
+    NotSpecified: (2 issues   
+  found. (ran in 1.6s):Stri   
+ ng) [], RemoteException
+    + FullyQualifiedErrorId : 
+    NativeCommandError
+ 

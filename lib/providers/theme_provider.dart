@@ -9,6 +9,8 @@ class ThemeProvider extends ChangeNotifier {
   
   ThemeData get themeData {
     if (_themeName == 'Light') return AppTheme.lightTheme;
+    if (_themeName == 'AMOLED') return AppTheme.amoledTheme;
+    if (_themeName == 'Midnight') return AppTheme.midnightTheme;
     return AppTheme.darkTheme;
   }
 
